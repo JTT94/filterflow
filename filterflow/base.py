@@ -32,6 +32,7 @@ class State(object):
     def __init__(self, n_particles: int, batch_size: int, dimension: int, particles: tf.Tensor,
                  log_weights: tf.Tensor = None, weights: tf.Tensor = None, log_likelihood: tf.Tensor = None,
                  check_shapes=False):
+        assert batch_size == 1, "Batch filtering is not supported yet"
         self._n_particles = n_particles
         self._batch_size = batch_size
         self._dimension = dimension

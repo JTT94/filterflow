@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 
-def normalise(weights, axis, log=True):#
+def normalize(weights, axis, log=True):
     """Normalises weights, either expressed in log terms or in their natural space"""
     if log:
         return weights - tf.reduce_logsumexp(weights, axis=axis, keepdims=True)

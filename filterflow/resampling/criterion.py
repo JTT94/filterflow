@@ -6,13 +6,13 @@ import tensorflow as tf
 from filterflow.base import State
 
 
-class ResamplingCriterion(metaclass=abc.ABCMeta):
+class ResamplingCriterionBase(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def apply(self, state: State):
         """Flags which batches of the state should be resampled"""
 
 
-class NeffCriterion(object):
+class NeffCriterion(ResamplingCriterionBase):
     """
     Standard Neff criterion for resampling. If the neff of the state weights falls below a certain threshold
     (either in relative or absolute terms) then the state will be flagged as needing resampling

@@ -4,7 +4,7 @@ import math
 import tensorflow as tf
 
 from filterflow.base import State
-from filterflow.resampling.base import Resampler
+from filterflow.resampling.base import ResamplerBase
 
 
 @tf.function
@@ -29,8 +29,8 @@ def resample_state(state: State, indices: tf.Tensor[int]):
                  uniform_weights, state.log_likelihood, False)
 
 
-class StandardResampler(Resampler, metaclass=abc.ABCMeta):
-    """Abstract Resampler."""
+class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
+    """Abstract ResamplerBase."""
 
     def __init__(self, on_log=True):
         """Constructor

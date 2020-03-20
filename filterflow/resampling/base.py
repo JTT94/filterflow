@@ -5,8 +5,8 @@ import tensorflow as tf
 from filterflow.base import State
 
 
-class Resampler(metaclass=abc.ABCMeta):
-    """Abstract Resampler."""
+class ResamplerBase(metaclass=abc.ABCMeta):
+    """Abstract ResamplerBase."""
 
     @abc.abstractmethod
     @tf.function
@@ -20,7 +20,7 @@ class Resampler(metaclass=abc.ABCMeta):
         """
 
 
-class NoResampling(Resampler):
+class NoResampling(ResamplerBase):
     @tf.function
     def apply(self, state: State):
         """ Resampling method

@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from filterflow.resampling.standard.base import StandardResampler
+from filterflow.resampling.standard.base import StandardResamplerBase
 
 
 @tf.function
@@ -11,7 +11,7 @@ def uniform_spacings(n_particles, batch_size):
     return res
 
 
-class MultinomialResampler(StandardResampler):
+class MultinomialResampler(StandardResamplerBase):
     @staticmethod
     @tf.function
     def _get_spacings(n_particles, batch_size):
