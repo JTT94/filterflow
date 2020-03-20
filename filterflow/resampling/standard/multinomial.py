@@ -13,6 +13,5 @@ def uniform_spacings(n_particles, batch_size):
 
 class MultinomialResampler(StandardResamplerBase):
     @staticmethod
-    @tf.function
     def _get_spacings(n_particles, batch_size):
         return uniform_spacings(n_particles, batch_size)

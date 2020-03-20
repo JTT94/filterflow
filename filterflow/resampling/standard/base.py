@@ -20,9 +20,8 @@ def discrete_percentile_function(spacings, n_particles, axis, on_log, weights=No
     return tf.clip_by_value(indices, 0, n_particles - 1)
 
 
-@tf.function
-def resample_state(state: State, indices: tf.Tensor[int]):
-    particles = tf.gather(state.particles, indices, validate_indices=False)
+def resample_state(state: State, indices: tf.Tensor):
+    particles = tf.gather(state.particles, indices, axis=0, batch_dims=1, validate_indices=False)
     uniform_weights = tf.fill([state.n_particles, state.batch_size], 1 / state.n_particles)
     uniform_log_weights = tf.fill([state.n_particles, state.batch_size], -math.log(state.n_particles))
     return State(state.n_particles, state.batch_size, state.dimension, particles, uniform_log_weights,
@@ -36,7 +35,7 @@ class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
         """Constructor
 
         :param on_log: bool
-            Should the resampling use logweights
+            Should the resampling use log weights
         """
         self._on_log = on_log
 
@@ -45,7 +44,7 @@ class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
     def _get_spacings(n_particles, batch_size):
         """Spacings variates to give for empirical CDF block selection"""
 
-    def apply(self, state: State):
+    def apply(self, state: State, flag: tf.Tensor):
         """See base class"""
         n_particles = state.n_particles
         batch_size = state.batch_size

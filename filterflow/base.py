@@ -31,14 +31,14 @@ class State(object):
 
     def __init__(self, n_particles: int, batch_size: int, dimension: int, particles: tf.Tensor,
                  log_weights: tf.Tensor = None, weights: tf.Tensor = None, log_likelihood: tf.Tensor = None,
-                 check_shapes=False):
+                 check_shapes=False, name='State'):
         assert batch_size == 1, "Batch filtering is not supported yet"
         self._n_particles = n_particles
         self._batch_size = batch_size
         self._dimension = dimension
         self._particles = particles
-        self._log_weights = log_weights or tf.math.log(weights)
-        self._weights = weights or tf.math.exp(log_weights)
+        self._log_weights = log_weights if log_weights is not None else tf.math.log(weights)
+        self._weights = weights if weights is not None else tf.math.exp(log_weights)
         self._log_likelihood = log_likelihood or tf.constant(0.)
         if check_shapes:
             self._check_shapes()
@@ -100,19 +100,19 @@ class State(object):
 
 
 class ObservationBase(metaclass=abc.ABCMeta):
-    __slots__ = ['_observations', '_dimension']
+    __slots__ = ['_observation', '_dimension']
 
-    def __init__(self, observations, dimension):
-        self._observations = observations
+    def __init__(self, observation, dimension):
+        self._observation = observation
         self._dimension = dimension
 
     @property
-    def shape(self):
-        return [1, self._dimension]
+    def dimension(self):
+        return self._dimension
 
     @property
-    def observations(self):
-        return tf.reshape(self._observations, (1, self._dimension))
+    def observation(self):
+        return self._observation
 
 
 class InputsBase(metaclass=abc.ABCMeta):

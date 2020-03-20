@@ -9,8 +9,8 @@ class ResamplerBase(metaclass=abc.ABCMeta):
     """Abstract ResamplerBase."""
 
     @abc.abstractmethod
-    @tf.function
-    def apply(self, state: State):
+
+    def apply(self, state: State, flag: tf.Tensor):
         """ Resampling method
 
         :param state: State
@@ -21,8 +21,8 @@ class ResamplerBase(metaclass=abc.ABCMeta):
 
 
 class NoResampling(ResamplerBase):
-    @tf.function
-    def apply(self, state: State):
+
+    def apply(self, state: State, flag: tf.Tensor):
         """ Resampling method
 
         :param state: State

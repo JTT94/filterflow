@@ -24,7 +24,7 @@ class NeffCriterion(ResamplingCriterionBase):
         self._on_log = on_log
         self._assume_normalized = assume_normalized
 
-    @tf.function
+
     def apply(self, state: State):
         """See base class"""
         if self._is_relative:

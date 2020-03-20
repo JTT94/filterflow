@@ -9,7 +9,7 @@ from filterflow.transition.base import TransitionModelBase
 from filterflow.utils import normalize
 
 
-class ParticleFilter(object):
+class ParticleFilter(tf.Module):
 
     def __init__(self, observation_model: ObservationModelBase, transition_model: TransitionModelBase,
                  emission_model: EmitterModelBase, resampling_criterion: ResamplingCriterionBase,
@@ -33,8 +33,10 @@ class ParticleFilter(object):
         :return: Proposed State
         :rtype: State
         """
-        if self._resampling_criterion.apply(state):
-            state = self._resampling_method.apply(state)
+        print(state.particles.shape)
+        resampling_flag = self._resampling_criterion.apply(state)
+        state = self._resampling_method.apply(state, resampling_flag)
+        print(state.particles.shape)
         proposal = self._emission_model.emit(state, inputs, observation)
         return proposal
 

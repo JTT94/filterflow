@@ -128,3 +128,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+/notebooks/.ipynb_checkpoints/
