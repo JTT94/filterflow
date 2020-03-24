@@ -22,7 +22,7 @@ def _discrete_percentile_function(spacings, n_particles, on_log, weights=None, l
     return tf.clip_by_value(indices, 0, n_particles - 1)
 
 
-# @tf.function
+@tf.function
 def _resample(particles: tf.Tensor, weights: tf.Tensor, log_weights: tf.Tensor, indices: tf.Tensor,
               flags: tf.Tensor, n_particles: int, batch_size: int):
     uniform_weights = tf.ones_like(weights) / n_particles
@@ -77,6 +77,7 @@ class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
         # TODO: The real batch_size is the sum of flags. We shouldn't do more operations than we need...
 
         spacings = self._get_spacings(self._n_particles, batch_size)
+        # TODO: We should be able to get log spacings directly to always stay in log space.
         stacked_weights = tf.stack([state.weights for state in states], 0)
         stacked_log_weights = tf.stack([state.log_weights for state in states], 0)
         stacked_particles = tf.stack([state.particles for state in states], 0)
@@ -90,8 +91,8 @@ class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
                                                                                   self._n_particles,
                                                                                   batch_size)
         particles = tf.unstack(resampled_particles, axis=0)
-        weights = tf.unstack(resampled_weights, axis= 0)
-        log_weights = tf.unstack(resampled_log_weights, axis= 0)
+        weights = tf.unstack(resampled_weights, axis=0)
+        log_weights = tf.unstack(resampled_log_weights, axis=0)
         states = [State(state.dimension, state_particles, state_log_weights, state_weights, state.log_likelihood, False)
                   for state, state_particles, state_log_weights, state_weights in
                   zip(states, particles, log_weights, weights)]

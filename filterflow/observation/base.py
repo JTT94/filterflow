@@ -7,7 +7,6 @@ from filterflow.base import State, ObservationBase
 
 class ObservationModelBase(tf.Module, metaclass=abc.ABCMeta):
     @abc.abstractmethod
-
     def loglikelihood(self, state: State, observation: ObservationBase):
         """Computes the loglikelihood of an observation given proposed particles
         :param state: State

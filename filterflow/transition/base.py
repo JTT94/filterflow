@@ -20,7 +20,6 @@ class TransitionModelBase(tf.Module, metaclass=abc.ABCMeta):
         return self._n_particles
 
     @abc.abstractmethod
-
     def loglikelihood(self, prior_state: State, proposed_state: State, inputs: InputsBase):
         """Computes the loglikelihood of an observation given proposed particles
         :param prior_state: State
@@ -34,7 +33,6 @@ class TransitionModelBase(tf.Module, metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-
     def sample(self, state: State, inputs: InputsBase):
         """Samples a new proposed state conditionally on prior state and some inputs
         :param state: State
