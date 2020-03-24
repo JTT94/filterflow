@@ -5,7 +5,7 @@ import tensorflow as tf
 from filterflow.base import State, ObservationBase
 
 
-class ObservationModelBase(tf.Module, metaclass=abc.ABCMeta):
+class ObservationModelBase(object, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def loglikelihood(self, state: State, observation: ObservationBase):
         """Computes the loglikelihood of an observation given proposed particles
@@ -16,4 +16,3 @@ class ObservationModelBase(tf.Module, metaclass=abc.ABCMeta):
         :return: a tensor of loglikelihoods for all particles
         :rtype: tf.Tensor
         """
-        return self._loglikelihood(state.particles, observation)
