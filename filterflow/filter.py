@@ -1,3 +1,5 @@
+from typing import List
+
 import tensorflow as tf
 
 from filterflow.base import State, ObservationBase, InputsBase
@@ -17,27 +19,25 @@ class ParticleFilter(tf.Module):
         super(ParticleFilter, self).__init__(name=name)
         self._observation_model = observation_model
         self._transition_model = transition_model
-        self._emission_model = emission_model
+        self._proposal_model = emission_model
         self._resampling_criterion = resampling_criterion
         self._resampling_method = resampling_method
 
-    def propose(self, state: State, observation: ObservationBase, inputs: InputsBase):
+    def propose(self, states: List[State], observation: ObservationBase, inputs: List[InputsBase]):
         """Predict step of the filter
 
-        :param state: State
+        :param states: List[State]
             prior state of the filter
         :param observation: ObservationBase
             Observation used for look ahead proposal
-        :param inputs: InputsBase
+        :param inputs: List[InputsBase]
             Inputs used for prediction
         :return: Proposed State
         :rtype: State
         """
-        print(state.particles.shape)
-        resampling_flag = self._resampling_criterion.apply(state)
-        state = self._resampling_method.apply(state, resampling_flag)
-        print(state.particles.shape)
-        proposal = self._emission_model.propose(state, inputs, observation)
+        resampling_flag = self._resampling_criterion.apply(states)
+        resampled_states = self._resampling_method.apply(states, resampling_flag)
+        proposal = self._proposal_model.propose(resampled_states, inputs, observation)
         return proposal
 
     def predict(self, state: State, inputs: InputsBase):
@@ -52,7 +52,7 @@ class ParticleFilter(tf.Module):
         """
         return self._transition_model.sample(state, inputs)
 
-    def update_weights(self, prior_state: State, proposed_state: State, observation: ObservationBase,
+    def propose_and_update_weights(self, states: List[State], observation: ObservationBase,
                        inputs: InputsBase):
         """
         :param prior_state: State
@@ -65,13 +65,17 @@ class ParticleFilter(tf.Module):
             inputs for the observation_model
         :return: Updated weights
         """
-        log_weights = self._transition_model.loglikelihood(prior_state, proposed_state, inputs)
-        log_weights = log_weights + self._observation_model.loglikelihood(proposed_state, observation)
+        resampling_flag = self._resampling_criterion.apply(states)
+        resampled_states = self._resampling_method.apply(states, resampling_flag)
+        proposed_states = self._proposal_model.propose(resampled_states, inputs, observation)
 
+        log_weights = self._transition_model.loglikelihood(states, proposed_states, inputs)
+        log_weights = log_weights + self._observation_model.loglikelihood(proposed_states, observation)
+        log_weights = log_weights - self._proposal_model.loglikelihood(proposed_states, states, inputs, observation)
         log_likelihood_increment = tf.math.reduce_logsumexp(log_weights, 0)
-        log_likelihood = prior_state.log_likelihood + log_likelihood_increment
+        log_likelihoods = states.log_likelihood + log_likelihood_increment
 
-        log_weights = log_weights + prior_state.log_weights
+        log_weights = log_weights + state.log_weights
         normalized_log_weights = normalize(log_weights, 0, True)
         return State(proposed_state.n_particles, proposed_state.batch_size, proposed_state.dimension,
                      proposed_state.particles, normalized_log_weights, None, log_likelihood, False)
