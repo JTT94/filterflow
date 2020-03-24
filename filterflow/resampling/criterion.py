@@ -1,6 +1,5 @@
 import abc
 import math
-from typing import List
 
 import tensorflow as tf
 
@@ -9,11 +8,11 @@ from filterflow.base import State
 
 class ResamplingCriterionBase(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def apply(self, states: List[State]):
-        """Flags which states should be resampled
+    def apply(self, state: State):
+        """Flags which batches should be resampled
 
-        :param states: List[State]
-            current states
+        :param state: State
+            current state
         :return: mask of booleans
         :rtype tf.Tensor
         """
@@ -41,22 +40,22 @@ class NeffCriterion(ResamplingCriterionBase):
     (either in relative or absolute terms) then the state will be flagged as needing resampling
     """
 
-    def __init__(self, threshold, n_particles, is_relative, on_log=True, assume_normalized=True):
-        self._threshold = threshold * n_particles if is_relative else threshold
+    def __init__(self, threshold, is_relative, on_log=True, assume_normalized=True):
+        self._threshold = threshold
+        self._is_relative = is_relative
         self._on_log = on_log
         self._assume_normalized = assume_normalized
 
-    def apply(self, states: List[State]):
-        """Flags which states should be resampled
+    def apply(self, state: State):
+        """Flags which batches should be resampled
 
-        :param states: List[State]
-            current states
+        :param state: State
+            current state
         :return: mask of booleans
         :rtype tf.Tensor
         """
+        threshold = self._threshold if not self._is_relative else state.n_particles * self._threshold
         if self._on_log:
-            log_weights = tf.stack([state.log_weights for state in states], 0)
-            return _neff(log_weights, self._assume_normalized, self._on_log, self._threshold)
+            return _neff(state.log_weights, self._assume_normalized, self._on_log, threshold)
         else:
-            weights = tf.stack([state.weights for state in states], 0)
-            return _neff(weights, self._assume_normalized, self._on_log, self._threshold)
+            return _neff(state.weights, self._assume_normalized, self._on_log, threshold)

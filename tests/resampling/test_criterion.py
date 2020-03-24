@@ -9,6 +9,7 @@ class MockState(object):
     def __init__(self, weights):
         self.weights = weights
         self.log_weights = tf.math.log(weights)
+        self.n_particles = self.weights.shape.as_list()[1]
 
 
 class TestNeffCriterion(tf.test.TestCase):
@@ -18,13 +19,13 @@ class TestNeffCriterion(tf.test.TestCase):
 
         self.log_weights = tf.math.log(self.weights)
 
-        self.states = [MockState(self.weights[0]), MockState(self.weights[1])]
+        self.state = MockState(self.weights)
 
         self._scaled_weights = 3. * self.weights
         self._scaled_log_weights = self.log_weights + math.log(3)
 
-        self.neff_log_instance = NeffCriterion(0.5, 3, True, True, True)
-        self.neff_instance = NeffCriterion(0.5, 3, True, False, True)
+        self.neff_log_instance = NeffCriterion(0.5, True, True, True)
+        self.neff_instance = NeffCriterion(0.5, True, False, True)
 
     def test_neff_normalized(self):
         flag = _neff(self.weights, True, False, 0.5 * 3)
@@ -41,8 +42,8 @@ class TestNeffCriterion(tf.test.TestCase):
         self.assertAllEqual(flag, [False, True])
 
     def test_neff(self):
-        log_flags = self.neff_log_instance.apply(self.states)
-        flags = self.neff_instance.apply(self.states)
+        log_flags = self.neff_log_instance.apply(self.state)
+        flags = self.neff_instance.apply(self.state)
 
         self.assertAllEqual(log_flags, flags)
         self.assertAllEqual(flags, [False, True])

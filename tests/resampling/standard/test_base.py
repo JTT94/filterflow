@@ -68,26 +68,22 @@ class TestStandardResamplerBase(tf.test.TestCase):
         self.n_particles = 3
         self.batch_size = 2
 
-        self.state_1 = State(4,
-                             tf.reshape(tf.linspace(0., 3 * 4 - 1., 3 * 4),
-                                        [3, 4]),
-                             None,
-                             tf.constant([0.26, 0.5, 0.23999]),
-                             tf.constant(0.))
-        self.state_2 = State(4,
-                             tf.reshape(tf.linspace(3 * 4., 2 * 3 * 4 - 1., 3 * 4),
-                                        [3, 4]),
-                             None,
-                             tf.constant([0.3, 0.31, 0.39]),
-                             tf.constant(0.))
+        self.state = State(2, 3, 4,
+                           tf.reshape(tf.linspace(0., 2 * 3 * 4 - 1., 2 * 3 * 4),
+                                      [2, 3, 4]),
+                           None,
+                           tf.constant([[0.26, 0.5, 0.23999],
+                                        [0.3, 0.31, 0.39]]),
+                           tf.constant([0., 0.]))
 
         self.flags = tf.constant([True, False])
 
-        self.resampler = self.Resampler(3, False)
+        self.resampler = self.Resampler(False)
 
     def test_apply(self):
-        resampled_states = self.resampler.apply([self.state_1, self.state_2], self.flags)
-        self.assertEquals(len(resampled_states), 2)
-        self.assertAllClose(resampled_states[0].particles[0], self.state_1.particles[1])
-        self.assertAllClose(resampled_states[0].particles[1], self.state_1.particles[1])
-        self.assertAllClose(resampled_states[0].particles[2], self.state_1.particles[1])
+        resampled_state = self.resampler.apply(self.state, self.flags)
+        self.assertAllEqual(resampled_state.shape, self.state.shape)
+        self.assertAllClose(resampled_state.particles[0, 0], self.state.particles[0,1])
+        self.assertAllClose(resampled_state.particles[0, 1], self.state.particles[0, 1])
+        self.assertAllClose(resampled_state.particles[0, 2], self.state.particles[0, 1])
+

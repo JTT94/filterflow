@@ -1,6 +1,5 @@
 import abc
 import math
-from typing import List
 
 import tensorflow as tf
 
@@ -47,15 +46,12 @@ def _resample(particles: tf.Tensor, weights: tf.Tensor, log_weights: tf.Tensor, 
 class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
     """Abstract ResamplerBase."""
 
-    def __init__(self, n_particles, on_log=True):
+    def __init__(self, on_log=True):
         """Constructor
 
-        :param n_particles: int
-            Number of particles in states
         :param on_log: bool
             Should the resampling use log weights
         """
-        self._n_particles = n_particles
         self._on_log = on_log
 
     @staticmethod
@@ -63,38 +59,31 @@ class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
     def _get_spacings(n_particles, batch_size):
         """Spacings variates to give for empirical CDF block selection"""
 
-    def apply(self, states: List[State], flags: tf.Tensor):
+    def apply(self, state: State, flags: tf.Tensor):
         """ Resampling method
 
-        :param states: List[State]
+        :param state State
             Particle filter state
         :param flags: tf.Tensor
             Flags for resampling
-        :return: list of resampled states
-        :rtype: List[State]
+        :return: resampled state
+        :rtype: State
         """
-        batch_size = len(states)
+        batch_size = state.batch_size
+        n_particles = state.n_particles
         # TODO: The real batch_size is the sum of flags. We shouldn't do more operations than we need...
 
-        spacings = self._get_spacings(self._n_particles, batch_size)
+        spacings = self._get_spacings(n_particles, batch_size)
         # TODO: We should be able to get log spacings directly to always stay in log space.
-        stacked_weights = tf.stack([state.weights for state in states], 0)
-        stacked_log_weights = tf.stack([state.log_weights for state in states], 0)
-        stacked_particles = tf.stack([state.particles for state in states], 0)
-        indices = _discrete_percentile_function(spacings, self._n_particles, self._on_log, stacked_weights,
-                                                stacked_log_weights)
-        resampled_particles, resampled_weights, resampled_log_weights = _resample(stacked_particles,
-                                                                                  stacked_weights,
-                                                                                  stacked_log_weights,
+        indices = _discrete_percentile_function(spacings, n_particles, self._on_log, state.weights,
+                                                state.log_weights)
+        resampled_particles, resampled_weights, resampled_log_weights = _resample(state.particles,
+                                                                                  state.weights,
+                                                                                  state.log_weights,
                                                                                   indices,
                                                                                   flags,
-                                                                                  self._n_particles,
+                                                                                  n_particles,
                                                                                   batch_size)
-        particles = tf.unstack(resampled_particles, axis=0)
-        weights = tf.unstack(resampled_weights, axis=0)
-        log_weights = tf.unstack(resampled_log_weights, axis=0)
-        states = [State(state.dimension, state_particles, state_log_weights, state_weights, state.log_likelihood, False)
-                  for state, state_particles, state_log_weights, state_weights in
-                  zip(states, particles, log_weights, weights)]
 
-        return states
+        return State(batch_size, n_particles, state.dimension, resampled_particles, resampled_log_weights,
+                     resampled_weights, state.log_likelihoods, check_shapes=state.check_shapes)

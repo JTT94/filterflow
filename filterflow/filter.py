@@ -1,10 +1,8 @@
-from typing import List
-
 import tensorflow as tf
 
 from filterflow.base import State, ObservationBase, InputsBase
-from filterflow.proposal.base import ProposalModelBase
 from filterflow.observation.base import ObservationModelBase
+from filterflow.proposal.base import ProposalModelBase
 from filterflow.resampling.base import ResamplerBase
 from filterflow.resampling.criterion import ResamplingCriterionBase
 from filterflow.transition.base import TransitionModelBase
@@ -23,23 +21,6 @@ class ParticleFilter(tf.Module):
         self._resampling_criterion = resampling_criterion
         self._resampling_method = resampling_method
 
-    def propose(self, states: List[State], observation: ObservationBase, inputs: List[InputsBase]):
-        """Predict step of the filter
-
-        :param states: List[State]
-            prior state of the filter
-        :param observation: ObservationBase
-            Observation used for look ahead proposal
-        :param inputs: List[InputsBase]
-            Inputs used for prediction
-        :return: Proposed State
-        :rtype: State
-        """
-        resampling_flag = self._resampling_criterion.apply(states)
-        resampled_states = self._resampling_method.apply(states, resampling_flag)
-        proposal = self._proposal_model.propose(resampled_states, inputs, observation)
-        return proposal
-
     def predict(self, state: State, inputs: InputsBase):
         """Predict step of the filter
 
@@ -52,30 +33,28 @@ class ParticleFilter(tf.Module):
         """
         return self._transition_model.sample(state, inputs)
 
-    def propose_and_update_weights(self, states: List[State], observation: ObservationBase,
-                       inputs: InputsBase):
+    def propose_and_update(self, state: State, observation: ObservationBase,
+                                   inputs: InputsBase):
         """
-        :param prior_state: State
-            prior state of the filter
-        :param proposed_state:
-            proposed state of the filter to be corrected
+        :param state: State
+            current state of the filter
         :param observation: ObservationBase
             observation to compare the state against
         :param inputs: InputsBase
             inputs for the observation_model
         :return: Updated weights
         """
-        resampling_flag = self._resampling_criterion.apply(states)
-        resampled_states = self._resampling_method.apply(states, resampling_flag)
-        proposed_states = self._proposal_model.propose(resampled_states, inputs, observation)
+        resampling_flag = self._resampling_criterion.apply(state)
+        resampled_state = self._resampling_method.apply(state, resampling_flag)
+        proposed_state = self._proposal_model.propose(resampled_state, inputs, observation)
 
-        log_weights = self._transition_model.loglikelihood(states, proposed_states, inputs)
-        log_weights = log_weights + self._observation_model.loglikelihood(proposed_states, observation)
-        log_weights = log_weights - self._proposal_model.loglikelihood(proposed_states, states, inputs, observation)
-        log_likelihood_increment = tf.math.reduce_logsumexp(log_weights, 0)
-        log_likelihoods = states.log_likelihood + log_likelihood_increment
+        log_weights = self._transition_model.loglikelihood(state, proposed_state, inputs)
+        log_weights = log_weights + self._observation_model.loglikelihood(proposed_state, observation)
+        log_weights = log_weights - self._proposal_model.loglikelihood(proposed_state, state, inputs, observation)
+        log_likelihood_increment = tf.math.reduce_logsumexp(log_weights, 1)
+        log_likelihoods = state.log_likelihoods + log_likelihood_increment
 
         log_weights = log_weights + state.log_weights
         normalized_log_weights = normalize(log_weights, 0, True)
-        return State(proposed_state.n_particles, proposed_state.batch_size, proposed_state.dimension,
-                     proposed_state.particles, normalized_log_weights, None, log_likelihood, False)
+        return State(proposed_state.batch_size, proposed_state.n_particles, proposed_state.dimension,
+                     proposed_state.particles, normalized_log_weights, None, log_likelihoods, state.check_shapes)

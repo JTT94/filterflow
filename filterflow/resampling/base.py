@@ -1,5 +1,4 @@
 import abc
-from typing import List
 
 import tensorflow as tf
 
@@ -10,28 +9,28 @@ class ResamplerBase(metaclass=abc.ABCMeta):
     """Abstract ResamplerBase."""
 
     @abc.abstractmethod
-    def apply(self, states: List[State], flags: tf.Tensor):
+    def apply(self, state: State, flags: tf.Tensor):
         """ Resampling method
 
-        :param states: List[State]
+        :param state: State
             Particle filter state
         :param flags: tf.Tensor
             Flags for resampling
-        :return: list of resampled states
-        :rtype: List[State]
+        :return: resampled state
+        :rtype: State
         """
 
 
 class NoResampling(ResamplerBase):
 
-    def apply(self, states: List[State], flags: tf.Tensor):
+    def apply(self, state: State, flags: tf.Tensor):
         """ Resampling method
 
-        :param states: State
+        :param state: State
             Particle filter state
         :param flags: tf.Tensor
             Flags for resampling
-        :return: list of resampled states
-        :rtype: List[State]
+        :return: resampled state
+        :rtype: State
         """
-        return states
+        return state
