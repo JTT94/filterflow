@@ -1,0 +1,93 @@
+import math
+
+import tensorflow as tf
+
+from filterflow.base import State
+from filterflow.resampling.standard.base import _discrete_percentile_function, _resample, StandardResamplerBase
+
+
+class TestBaseFunctions(tf.test.TestCase):
+    def setUp(self):
+        self.spacings = tf.constant([[0.25, 0.66, 0.9],
+                                     [0.5, 0.6, 0.8]])
+        self.n_particles = 3
+        self.weights = tf.constant([[0.26, 0.5, 0.23999],
+                                    [0.3, 0.31, 0.39]])
+        self.log_weights = tf.math.log(self.weights)
+
+        self.particles = tf.reshape(tf.linspace(0., 2 * 3 * 4 - 1., 2 * 3 * 4),
+                                    [2, 3, 4])  # batch_size, n_particles, dimension
+        self.flags = tf.constant([False, True])
+
+    def test_resample(self):
+        indices = _discrete_percentile_function(self.spacings,
+                                                self.n_particles,
+                                                True,
+                                                None,
+                                                self.log_weights)
+        resampled_particles, resampled_weights, resampled_log_weights = _resample(self.particles, self.weights,
+                                                                                  self.log_weights, indices,
+                                                                                  self.flags, 3, 2)
+
+        self.assertAllClose(resampled_particles[0], self.particles[0])
+        self.assertAllClose(resampled_weights[0], self.weights[0])
+        self.assertAllClose(resampled_log_weights[0], self.log_weights[0])
+
+        self.assertAllClose(resampled_particles[1][0], self.particles[1][1])
+        self.assertAllClose(resampled_particles[1][1], self.particles[1][1])
+        self.assertAllClose(resampled_particles[1][2], self.particles[1][2])
+        self.assertAllClose(resampled_weights[1], [1 / 3] * 3)
+        self.assertAllClose(resampled_log_weights[1], [-math.log(3)] * 3)
+
+    def test_discrete_percentile_function(self):
+        indices_from_log = _discrete_percentile_function(self.spacings,
+                                                         self.n_particles,
+                                                         True,
+                                                         None,
+                                                         self.log_weights)
+
+        indices_from_raw = _discrete_percentile_function(self.spacings,
+                                                         self.n_particles,
+                                                         False,
+                                                         self.weights,
+                                                         None)
+
+        self.assertAllEqual(indices_from_log, indices_from_raw)
+        self.assertAllEqual(indices_from_log, tf.constant([[0, 1, 2],
+                                                           [1, 1, 2]]))
+
+
+class TestStandardResamplerBase(tf.test.TestCase):
+    class Resampler(StandardResamplerBase):
+        @staticmethod
+        def _get_spacings(n_particles, batch_size):
+            return tf.constant([[0.33, 0.5, 0.6],
+                                [0.25, 0.5, 0.75]])
+
+    def setUp(self):
+        self.n_particles = 3
+        self.batch_size = 2
+
+        self.state_1 = State(4,
+                             tf.reshape(tf.linspace(0., 3 * 4 - 1., 3 * 4),
+                                        [3, 4]),
+                             None,
+                             tf.constant([0.26, 0.5, 0.23999]),
+                             tf.constant(0.))
+        self.state_2 = State(4,
+                             tf.reshape(tf.linspace(3 * 4., 2 * 3 * 4 - 1., 3 * 4),
+                                        [3, 4]),
+                             None,
+                             tf.constant([0.3, 0.31, 0.39]),
+                             tf.constant(0.))
+
+        self.flags = tf.constant([True, False])
+
+        self.resampler = self.Resampler(3, False)
+
+    def test_apply(self):
+        resampled_states = self.resampler.apply([self.state_1, self.state_2], self.flags)
+        self.assertEquals(len(resampled_states), 2)
+        self.assertAllClose(resampled_states[0].particles[0], self.state_1.particles[1])
+        self.assertAllClose(resampled_states[0].particles[1], self.state_1.particles[1])
+        self.assertAllClose(resampled_states[0].particles[2], self.state_1.particles[1])

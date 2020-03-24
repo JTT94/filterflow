@@ -26,15 +26,12 @@ class State(object):
     """Particle Filter State
     State encapsulates the information about the particle filter current state.
     """
-    __slots__ = ['_n_particles', '_batch_size', '_dimension', '_particles', '_log_weights', '_weights',
+    __slots__ = ['_dimension', '_particles', '_log_weights', '_weights',
                  '_log_likelihood']
 
-    def __init__(self, n_particles: int, batch_size: int, dimension: int, particles: tf.Tensor,
+    def __init__(self, dimension: int, particles: tf.Tensor,
                  log_weights: tf.Tensor = None, weights: tf.Tensor = None, log_likelihood: tf.Tensor = None,
-                 check_shapes=False, name='State'):
-        assert batch_size == 1, "Batch filtering is not supported yet"
-        self._n_particles = n_particles
-        self._batch_size = batch_size
+                 check_shapes=False):
         self._dimension = dimension
         self._particles = particles
         self._log_weights = log_weights if log_weights is not None else tf.math.log(weights)
@@ -44,7 +41,12 @@ class State(object):
             self._check_shapes()
 
     def _check_shapes(self):
-        pass
+        weights_shape = self._weights.shape.as_list()
+        log_weights_shape = self._log_weights.shape.as_list()
+        shape = self.shape
+        assert shape[1] == self._dimension
+        assert weights_shape == log_weights_shape
+        assert shape[0] == weights_shape[0]
 
     def mean(self):
         """Weighted Average of the State
@@ -68,7 +70,7 @@ class State(object):
 
     @property
     def shape(self):
-        return [self._batch_size, self._n_particles, self._dimension]
+        return self._particles.shape.as_list()
 
     @property
     def particles(self):
@@ -85,14 +87,6 @@ class State(object):
     @property
     def weights(self):
         return self._weights
-
-    @property
-    def n_particles(self):
-        return self._n_particles
-
-    @property
-    def batch_size(self):
-        return self._batch_size
 
     @property
     def dimension(self):

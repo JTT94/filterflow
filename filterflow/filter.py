@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 from filterflow.base import State, ObservationBase, InputsBase
-from filterflow.emission.base import EmitterModelBase
+from filterflow.proposal.base import ProposalModelBase
 from filterflow.observation.base import ObservationModelBase
 from filterflow.resampling.base import ResamplerBase
 from filterflow.resampling.criterion import ResamplingCriterionBase
@@ -12,7 +12,7 @@ from filterflow.utils import normalize
 class ParticleFilter(tf.Module):
 
     def __init__(self, observation_model: ObservationModelBase, transition_model: TransitionModelBase,
-                 emission_model: EmitterModelBase, resampling_criterion: ResamplingCriterionBase,
+                 emission_model: ProposalModelBase, resampling_criterion: ResamplingCriterionBase,
                  resampling_method: ResamplerBase, name=None):
         super(ParticleFilter, self).__init__(name=name)
         self._observation_model = observation_model
@@ -37,7 +37,7 @@ class ParticleFilter(tf.Module):
         resampling_flag = self._resampling_criterion.apply(state)
         state = self._resampling_method.apply(state, resampling_flag)
         print(state.particles.shape)
-        proposal = self._emission_model.emit(state, inputs, observation)
+        proposal = self._emission_model.propose(state, inputs, observation)
         return proposal
 
     def predict(self, state: State, inputs: InputsBase):
