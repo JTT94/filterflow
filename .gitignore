@@ -16,6 +16,8 @@ venv/
 develop-eggs/
 dist/
 downloads/
+.vscode/
+venv
 eggs/
 .eggs/
 idea/
@@ -132,3 +134,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+/notebooks/.ipynb_checkpoints/

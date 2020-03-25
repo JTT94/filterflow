@@ -9,12 +9,34 @@ from filterflow.base import State
 class ResamplingCriterionBase(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def apply(self, state: State):
-        """Flags which batches of the state should be resampled"""
+        """Flags which batches should be resampled
+
+        :param state: State
+            current state
+        :return: mask of booleans
+        :rtype tf.Tensor
+        """
+
+
+@tf.function
+def _neff(tensor, assume_normalized: bool, is_log: bool, threshold: float) -> tf.Tensor:
+    if is_log:
+        if assume_normalized:
+            log_neff = -tf.reduce_logsumexp(2 * tensor, 1)
+        else:
+            log_neff = 2 * tf.reduce_logsumexp(tensor, 1) - tf.reduce_logsumexp(2 * tensor, 1)
+        return log_neff <= math.log(threshold)
+    else:
+        if assume_normalized:
+            neff = 1 / tf.reduce_sum(tensor ** 2, 1)
+        else:
+            neff = tf.reduce_sum(tensor, 1) ** 2 / tf.reduce_sum(tensor ** 2, 1)
+    return neff <= threshold
 
 
 class NeffCriterion(ResamplingCriterionBase):
     """
-    Standard Neff criterion for resampling. If the neff of the state weights falls below a certain threshold
+    Standard Neff criterion for resampling. If the neff of the state tensor falls below a certain threshold
     (either in relative or absolute terms) then the state will be flagged as needing resampling
     """
 
@@ -24,23 +46,16 @@ class NeffCriterion(ResamplingCriterionBase):
         self._on_log = on_log
         self._assume_normalized = assume_normalized
 
-    @tf.function
     def apply(self, state: State):
-        """See base class"""
-        if self._is_relative:
-            threshold = self._threshold * state.n_particles
-        else:
-            threshold = self._threshold
+        """Flags which batches should be resampled
 
+        :param state: State
+            current state
+        :return: mask of booleans
+        :rtype tf.Tensor
+        """
+        threshold = self._threshold if not self._is_relative else state.n_particles * self._threshold
         if self._on_log:
-            if self._assume_normalized:
-                log_neff = -tf.reduce_logsumexp(state.log_weights, 0)
-            else:
-                log_neff = 2 * tf.reduce_logsumexp(state.log_weights, 0) - tf.reduce_logsumexp(2 * state.log_weights, 0)
-            return log_neff <= math.log(threshold)
+            return _neff(state.log_weights, self._assume_normalized, self._on_log, threshold)
         else:
-            if self._assume_normalized:
-                neff = 1 / tf.reduce_sum(state.weights ** 2, 0)
-            else:
-                neff = tf.reduce_sum(state.weights, 0) ** 2 / tf.reduce_sum(state.weights ** 2, 0)
-        return neff <= threshold
+            return _neff(state.weights, self._assume_normalized, self._on_log, threshold)
