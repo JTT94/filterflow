@@ -9,15 +9,14 @@ from filterflow.transition.base import TransitionModelBase
 from filterflow.utils import normalize
 
 
-class ParticleFilter(tf.Module):
+class ParticleFilter(object):
 
     def __init__(self, observation_model: ObservationModelBase, transition_model: TransitionModelBase,
-                 emission_model: ProposalModelBase, resampling_criterion: ResamplingCriterionBase,
+                 proposal_model: ProposalModelBase, resampling_criterion: ResamplingCriterionBase,
                  resampling_method: ResamplerBase, name=None):
-        super(ParticleFilter, self).__init__(name=name)
         self._observation_model = observation_model
         self._transition_model = transition_model
-        self._proposal_model = emission_model
+        self._proposal_model = proposal_model
         self._resampling_criterion = resampling_criterion
         self._resampling_method = resampling_method
 
@@ -34,7 +33,7 @@ class ParticleFilter(tf.Module):
         return self._transition_model.sample(state, inputs)
 
     def propose_and_update(self, state: State, observation: ObservationBase,
-                                   inputs: InputsBase):
+                           inputs: InputsBase):
         """
         :param state: State
             current state of the filter
@@ -55,6 +54,6 @@ class ParticleFilter(tf.Module):
         log_likelihoods = state.log_likelihoods + log_likelihood_increment
 
         log_weights = log_weights + state.log_weights
-        normalized_log_weights = normalize(log_weights, 0, True)
+        normalized_log_weights = normalize(log_weights, 1, True)
         return State(proposed_state.batch_size, proposed_state.n_particles, proposed_state.dimension,
                      proposed_state.particles, normalized_log_weights, None, log_likelihoods, state.check_shapes)

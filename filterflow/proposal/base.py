@@ -47,4 +47,21 @@ class BootstrapProposalModel(ProposalModelBase):
 
     def propose(self, state: State, inputs: InputsBase, _observation: ObservationBase):
         """See base class"""
-        return self._transition_model.sample(state, inputs)
+        proposed_particles = self._transition_model.sample(state, inputs)
+        return State(state.batch_size, state.n_particles, state.dimension, proposed_particles, state.log_weights,
+                     state.weights, state.log_likelihoods, state.check_shapes)
+
+    def loglikelihood(self, proposed_state: State, state: State, inputs: InputsBase, observation: ObservationBase):
+        """Interface method for particle proposal
+        :param proposed_state: State
+            proposed state
+        :param state: State
+            previous particle filter state
+        :param inputs: InputsBase
+            Control variables (time elapsed, some environment variables, etc)
+        :param observation: ObservationBase
+            Look ahead observation for adapted particle proposal
+        :return: proposed State
+        :rtype: tf.Tensor
+        """
+        return self._transition_model.loglikelihood(state, proposed_state, inputs)
