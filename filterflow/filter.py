@@ -55,5 +55,12 @@ class ParticleFilter(object):
 
         log_weights = log_weights + state.log_weights
         normalized_log_weights = normalize(log_weights, 1, True)
-        return State(proposed_state.batch_size, proposed_state.n_particles, proposed_state.dimension,
-                     proposed_state.particles, normalized_log_weights, None, log_likelihoods, state.check_shapes)
+        return State(batch_size = proposed_state.batch_size, 
+                    n_particles = proposed_state.n_particles, 
+                    dimension   = proposed_state.dimension, 
+                    particles   = proposed_state.particles,
+                    log_weights = normalized_log_weights, 
+                    weights     = None, 
+                    log_likelihoods = log_likelihoods,
+                    check_shapes    = state.check_shapes)
+        
