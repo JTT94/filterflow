@@ -1,11 +1,12 @@
 import abc
 
+import attr
 import tensorflow as tf
 
-from filterflow.base import State, ObservationBase, InputsBase
+from filterflow.base import State, ObservationBase, InputsBase, Module
 
 
-class ProposalModelBase(tf.Module, metaclass=abc.ABCMeta):
+class ProposalModelBase(Module, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def propose(self, state: State, inputs: InputsBase, observation: ObservationBase):
@@ -48,8 +49,7 @@ class BootstrapProposalModel(ProposalModelBase):
     def propose(self, state: State, inputs: InputsBase, _observation: ObservationBase):
         """See base class"""
         proposed_particles = self._transition_model.sample(state, inputs)
-        return State(state.batch_size, state.n_particles, state.dimension, proposed_particles, state.log_weights,
-                     state.weights, state.log_likelihoods, state.check_shapes)
+        return attr.evolve(state, particles=proposed_particles)
 
     def loglikelihood(self, proposed_state: State, state: State, inputs: InputsBase, observation: ObservationBase):
         """Interface method for particle proposal

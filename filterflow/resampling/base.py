@@ -2,10 +2,10 @@ import abc
 
 import tensorflow as tf
 
-from filterflow.base import State
+from filterflow.base import State, Module
 
 
-class ResamplerBase(metaclass=abc.ABCMeta):
+class ResamplerBase(Module, metaclass=abc.ABCMeta):
     """Abstract ResamplerBase."""
 
     @abc.abstractmethod

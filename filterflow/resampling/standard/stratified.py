@@ -15,11 +15,14 @@ def _stratified_spacings(n_particles, batch_size):
     :rtype: tf.Tensor
     """
     z = tf.random.uniform((batch_size, n_particles))
-    z = z + tf.reshape(tf.linspace(0., n_particles-1., n_particles), [1, -1])
-    return z / n_particles
+    z = z + tf.reshape(tf.linspace(0., n_particles - 1., n_particles), [1, -1])
+    return z / tf.cast(n_particles, float)
 
 
 class StratifiedResampler(StandardResamplerBase):
+    def __init__(self, name='StratifiedResampler', on_log=True):
+        super(StratifiedResampler, self).__init__(name, on_log)
+
     @staticmethod
     def _get_spacings(n_particles, batch_size):
         return _stratified_spacings(n_particles, batch_size)
