@@ -6,7 +6,8 @@ from filterflow.transition.base import TransitionModelBase
 
 
 class RandomWalkModel(TransitionModelBase):
-    def __init__(self, transition_matrix: tf.Tensor, noise: tfp.distributions.Distribution):
+    def __init__(self, transition_matrix: tf.Tensor, noise: tfp.distributions.Distribution, name='RandomWalkModel'):
+        super(RandomWalkModel, self).__init__(name=name)
         self._transition_matrix = transition_matrix
         self._noise = noise
 
@@ -35,6 +36,6 @@ class RandomWalkModel(TransitionModelBase):
         :rtype: State
         """
         pushed_particles = tf.linalg.matvec(self._transition_matrix, state.particles)
-        batch_size = state.batch_size
-        n_particles = state.n_particles
-        return pushed_particles + self._noise.sample([batch_size, n_particles])
+
+        res = pushed_particles + self._noise.sample([pushed_particles.shape[0], pushed_particles.shape[1]])
+        return res

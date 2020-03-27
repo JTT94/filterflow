@@ -28,7 +28,7 @@ def squared_distances(x: tf.Tensor, y: tf.Tensor) -> tf.Tensor:
     :rtype tf.Tensor
     """
     # x.shape = [B, N, D]
-    xx = tf.reduce_sum(x * x, axis=-1, keepdims=True)
+    xx = tf.reduce_sum(x * x, axis=2, keepdims=True)
     xy = tf.einsum('bnd,bmd->bnm', x, y)
     yy = tf.expand_dims(tf.reduce_sum(y * y, axis=-1), 1)
     return tf.clip_by_value(xx - 2 * xy + yy, 0., float('inf'))
