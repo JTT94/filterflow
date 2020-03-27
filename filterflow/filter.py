@@ -53,7 +53,7 @@ class ParticleFilter(object):
         log_likelihood_increment = tf.math.reduce_logsumexp(log_weights, 1)
         log_likelihoods = state.log_likelihoods + log_likelihood_increment
 
-        log_weights = log_weights + state.log_weights
+        log_weights = log_weights + resampled_state.log_weights
         normalized_log_weights = normalize(log_weights, 1, True)
         return State(batch_size = proposed_state.batch_size, 
                     n_particles = proposed_state.n_particles, 
