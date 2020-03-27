@@ -1,6 +1,7 @@
+import attr
 import tensorflow as tf
 
-from filterflow.base import State, ObservationBase, InputsBase
+from filterflow.base import State, ObservationBase, InputsBase, Module
 from filterflow.observation.base import ObservationModelBase
 from filterflow.proposal.base import ProposalModelBase
 from filterflow.resampling.base import ResamplerBase
@@ -9,11 +10,11 @@ from filterflow.transition.base import TransitionModelBase
 from filterflow.utils import normalize
 
 
-class ParticleFilter(object):
-
+class ParticleFilter(Module):
     def __init__(self, observation_model: ObservationModelBase, transition_model: TransitionModelBase,
                  proposal_model: ProposalModelBase, resampling_criterion: ResamplingCriterionBase,
-                 resampling_method: ResamplerBase, name=None):
+                 resampling_method: ResamplerBase, name='ParticleFilter'):
+        super(ParticleFilter, self).__init__(name=name)
         self._observation_model = observation_model
         self._transition_model = transition_model
         self._proposal_model = proposal_model
@@ -46,7 +47,6 @@ class ParticleFilter(object):
         resampling_flag = self._resampling_criterion.apply(state)
         resampled_state = self._resampling_method.apply(state, resampling_flag)
         proposed_state = self._proposal_model.propose(resampled_state, inputs, observation)
-
         log_weights = self._transition_model.loglikelihood(state, proposed_state, inputs)
         log_weights = log_weights + self._observation_model.loglikelihood(proposed_state, observation)
         log_weights = log_weights - self._proposal_model.loglikelihood(proposed_state, state, inputs, observation)
@@ -55,12 +55,6 @@ class ParticleFilter(object):
 
         log_weights = log_weights + resampled_state.log_weights
         normalized_log_weights = normalize(log_weights, 1, True)
-        return State(batch_size = proposed_state.batch_size, 
-                    n_particles = proposed_state.n_particles, 
-                    dimension   = proposed_state.dimension, 
-                    particles   = proposed_state.particles,
-                    log_weights = normalized_log_weights, 
-                    weights     = None, 
-                    log_likelihoods = log_likelihoods,
-                    check_shapes    = state.check_shapes)
-        
+        return attr.evolve(proposed_state, weights=tf.math.exp(normalized_log_weights),
+                           log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)
+

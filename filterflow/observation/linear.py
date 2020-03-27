@@ -1,3 +1,4 @@
+import attr
 import tensorflow as tf
 import tensorflow_probability as tfp
 
@@ -5,14 +6,15 @@ from filterflow.base import State, ObservationBase
 from filterflow.observation.base import ObservationModelBase
 
 
+@attr.s
 class LinearObservation(ObservationBase):
-    def __init__(self, observation, dimension):
-        super(LinearObservation, self).__init__(tf.reshape(observation, [1, 1, dimension]), dimension)
+    observation = attr.ib(converter=lambda x: tf.reshape(x, [1, 1, -1]))
 
 
 class LinearObservationModel(ObservationModelBase):
-
-    def __init__(self, observation_matrix: tf.Tensor, error_rv: tfp.distributions.Distribution):
+    def __init__(self, observation_matrix: tf.Tensor, error_rv: tfp.distributions.Distribution,
+                 name='LinearObservationModel'):
+        super(LinearObservationModel, self).__init__(name=name)
         self._observation_matrix = observation_matrix
         self._error_rv = error_rv
 

@@ -1,12 +1,11 @@
 import abc
-import math
 
 import tensorflow as tf
 
-from filterflow.base import State
+from filterflow.base import State, Module
 
 
-class ResamplingCriterionBase(metaclass=abc.ABCMeta):
+class ResamplingCriterionBase(Module, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def apply(self, state: State):
         """Flags which batches should be resampled
@@ -18,14 +17,13 @@ class ResamplingCriterionBase(metaclass=abc.ABCMeta):
         """
 
 
-@tf.function
 def _neff(tensor, assume_normalized: bool, is_log: bool, threshold: float) -> tf.Tensor:
     if is_log:
         if assume_normalized:
             log_neff = -tf.reduce_logsumexp(2 * tensor, 1)
         else:
             log_neff = 2 * tf.reduce_logsumexp(tensor, 1) - tf.reduce_logsumexp(2 * tensor, 1)
-        return log_neff <= math.log(threshold)
+        return log_neff <= tf.math.log(threshold)
     else:
         if assume_normalized:
             neff = 1 / tf.reduce_sum(tensor ** 2, 1)
@@ -40,7 +38,8 @@ class NeffCriterion(ResamplingCriterionBase):
     (either in relative or absolute terms) then the state will be flagged as needing resampling
     """
 
-    def __init__(self, threshold, is_relative, on_log=True, assume_normalized=True):
+    def __init__(self, threshold, is_relative, on_log=True, assume_normalized=True, name='NeffCriterion'):
+        super(NeffCriterion, self).__init__(name=name)
         self._threshold = threshold
         self._is_relative = is_relative
         self._on_log = on_log
@@ -54,7 +53,7 @@ class NeffCriterion(ResamplingCriterionBase):
         :return: mask of booleans
         :rtype tf.Tensor
         """
-        threshold = self._threshold if not self._is_relative else state.n_particles * self._threshold
+        threshold = self._threshold if not self._is_relative else tf.cast(state.n_particles, float) * self._threshold
         if self._on_log:
             return _neff(state.log_weights, self._assume_normalized, self._on_log, threshold)
         else:
