@@ -2,10 +2,10 @@ import abc
 
 import tensorflow as tf
 
-from filterflow.base import State, InputsBase
+from filterflow.base import State, InputsBase, Module
 
 
-class TransitionModelBase(object, metaclass=abc.ABCMeta):
+class TransitionModelBase(Module, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def loglikelihood(self, prior_state: State, proposed_state: State, inputs: InputsBase):
         """Computes the loglikelihood of an observation given proposed particles

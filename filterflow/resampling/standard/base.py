@@ -1,6 +1,6 @@
 import abc
-import math
 
+import attr
 import tensorflow as tf
 
 from filterflow.base import State
@@ -21,24 +21,25 @@ def _discrete_percentile_function(spacings, n_particles, on_log, weights=None, l
     return tf.clip_by_value(indices, 0, n_particles - 1)
 
 
-@tf.function
 def _resample(particles: tf.Tensor, weights: tf.Tensor, log_weights: tf.Tensor, indices: tf.Tensor,
-              flags: tf.Tensor, n_particles: int, batch_size: int):
-    uniform_weights = tf.ones_like(weights) / n_particles
-    uniform_log_weights = tf.zeros_like(log_weights) - math.log(n_particles)
+              flags: tf.Tensor, n_particles: tf.Tensor, batch_size: tf.Tensor):
+    float_n_particles = tf.cast(n_particles, float)
+    uniform_weights = tf.ones_like(weights) / float_n_particles
+    uniform_log_weights = tf.zeros_like(log_weights) - tf.math.log(float_n_particles)
     resampled_particles = tf.gather(particles, indices, axis=1, batch_dims=1, validate_indices=False)
-
-    particles = tf.where(tf.reshape(flags, [-1, 1, 1]),
+    particles = tf.where(tf.reshape(flags, [batch_size, 1, 1]),
                          resampled_particles,
                          particles)
 
-    weights = tf.where(tf.reshape(flags, [-1, 1]),
+    weights = tf.where(tf.reshape(flags, [batch_size, 1]),
                        uniform_weights,
                        weights)
 
-    log_weights = tf.where(tf.reshape(flags, [-1, 1]),
+    log_weights = tf.where(tf.reshape(flags, [batch_size, 1]),
                            uniform_log_weights,
                            log_weights)
+
+
 
     return particles, weights, log_weights
 
@@ -46,13 +47,14 @@ def _resample(particles: tf.Tensor, weights: tf.Tensor, log_weights: tf.Tensor, 
 class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
     """Abstract ResamplerBase."""
 
-    def __init__(self, on_log=True):
+    def __init__(self, name, on_log=True):
         """Constructor
 
         :param on_log: bool
             Should the resampling use log weights
         """
         self._on_log = on_log
+        super(StandardResamplerBase, self).__init__(name=name)
 
     @staticmethod
     @abc.abstractmethod
@@ -85,5 +87,5 @@ class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
                                                                                   n_particles,
                                                                                   batch_size)
 
-        return State(batch_size, n_particles, state.dimension, resampled_particles, resampled_log_weights,
-                     resampled_weights, state.log_likelihoods, check_shapes=state.check_shapes)
+        return attr.evolve(state, particles=resampled_particles, weights=resampled_weights,
+                           log_weights=resampled_log_weights)
