@@ -1,9 +1,11 @@
 import tensorflow as tf
-from fivo.transport.utils import squared_distances, softmin
+
+from filterflow.resampling.differentiable.optimal_transport.utils import squared_distances, softmin
 
 MACHINE_PRECISION = 1e-10
 
 
+@tf.function
 def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, epsilon, threshold, max_iter):
     # initialisation
     a_y_init = softmin(epsilon, cost_yx, log_alpha)
@@ -33,7 +35,7 @@ def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, epsilon, threshold, max
         return i + 1, new_u, new_v, new_update_size
 
     n_iter = tf.constant(0)
-    initial_update_size = tf.constant(2 * threshold)
+    initial_update_size = 2 * threshold
     _total_iter, converged_a_y, converged_b_x, last_update_size = tf.while_loop(stop_condition, body,
                                                                                 loop_vars=[n_iter,
                                                                                            a_y_init,
@@ -47,8 +49,8 @@ def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, epsilon, threshold, max
     return a_y, b_x
 
 
-def sinkhorn_potentials(log_alpha, x, log_beta, y, epsilon, threshold, max_iter=100):
+@tf.function
+def sinkhorn_potentials(log_alpha, x, log_beta, y, epsilon, threshold, max_iter):
     cost_xy = 0.5 * squared_distances(x, tf.stop_gradient(y))
     cost_yx = 0.5 * squared_distances(y, tf.stop_gradient(x))
-    a_y, b_x = sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, epsilon, threshold, max_iter)
-    return a_y, b_x
+    return sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, epsilon, threshold, max_iter)
