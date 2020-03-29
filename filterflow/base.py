@@ -27,15 +27,71 @@ class State:
     weights = attr.ib()
     log_likelihoods = attr.ib()
 
+class StateSeries():
+    def __init__(self, dtype, batch_size, n_particles, dimension):
+        self.batch_size = batch_size
+        self.n_particles = n_particles
+        self.dimension = dimension
+        
+        # store states
+        # particles
+        self.particles_ta = tf.TensorArray(dtype, 
+                                      size=0, dynamic_size=True, clear_after_read=False,
+                                      element_shape = tf.TensorShape([batch_size,n_particles,dimension]))
+        # log_weights
+        self.log_weights_ta = tf.TensorArray(dtype, 
+                                        size=0, dynamic_size=True, clear_after_read=False,
+                                        element_shape = tf.TensorShape([batch_size,n_particles]))
+        # weights
+        self.weights_ta = tf.TensorArray(dtype, 
+                                    size=0, dynamic_size=True, clear_after_read=False,
+                                    element_shape = tf.TensorShape([batch_size,n_particles]))
+        # log_likelihoods
+        self.log_likelihoods_ta = tf.TensorArray(dtype, 
+                                            size=0, dynamic_size=True, clear_after_read=False,
+                                            element_shape = tf.TensorShape([1,]))
+    
+    def write(self, t, state):
+        self.particles_ta = self.particles_ta.write(t, state.particles)
+        self.log_weights_ta = self.log_weights_ta.write(t, state.log_weights)
+        self.weights_ta = self.weights_ta.write(t, state.weights)
+        self.log_likelihoods_ta = self.log_likelihoods_ta.write(t, state.log_likelihoods)
+    
+    def read(self, t):
+        particles = self.particles_ta.read(t)
+        log_weights = self.log_weights_ta.read(t)
+        weights = self.weights_ta.read(t)
+        log_likelihoods = self.log_likelihoods_ta.read(t)
+
+        state = State(batch_size = self.batch_size,
+                     n_particles = self.n_particles,
+                     dimension = self.dimension,
+                     particles = particles, 
+                     log_weights= log_weights,
+                     weights=weights, 
+                     log_likelihoods=log_likelihoods)
+        return state
 
 @attr.s
 class ObservationBase(metaclass=abc.ABCMeta):
+
     observation = attr.ib()
     shape = attr.ib(init=False)
 
     def __attrs_post_init__(self):
         self.shape = self.observation.shape
 
+class ObservationSeries(metaclass=abc.ABCMeta):
+    def __init__(self):
+        self.n_observations = 0
+
+    @abc.abstractmethod
+    def write(self, t, observation):
+        pass
+    
+    @abc.abstractmethod
+    def read(self, t):
+        pass
 
 @attr.s
 class InputsBase(metaclass=abc.ABCMeta):
