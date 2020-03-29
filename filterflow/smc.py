@@ -69,10 +69,10 @@ class SMC(Module):
         log_weights = self._transition_model.loglikelihood(state, proposed_state, inputs)
         log_weights = log_weights + self._observation_model.loglikelihood(proposed_state, observation)
         log_weights = log_weights - self._proposal_model.loglikelihood(proposed_state, state, inputs, observation)
+        log_weights = log_weights + state.log_weights
+
         log_likelihood_increment = tf.math.reduce_logsumexp(log_weights, 1)
         log_likelihoods = state.log_likelihoods + log_likelihood_increment
-
-        log_weights = log_weights + state.log_weights
         normalized_log_weights = normalize(log_weights, 1, True)
         return attr.evolve(proposed_state, weights=tf.math.exp(normalized_log_weights),
                            log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)
