@@ -10,11 +10,18 @@ from filterflow.observation.base import ObservationModelBase
 class LinearObservation(ObservationBase):
     observation = attr.ib(converter=lambda x: tf.reshape(x, [1, 1, -1]))
 
+@attr.s
 class LinearObservationSeries(ObservationSeries):
-    def __init__(self, dtype, dimension):
-        self.observation_ta = tf.TensorArray(dtype, 
+    dtype = attr.ib()
+    dimension = attr.ib()
+    
+    observation_ta = attr.ib(init=False)
+    n_observations = attr.ib(init=False)
+
+    def __attrs_post_init__(self):
+        self.observation_ta = tf.TensorArray(self.dtype, 
                                              size=0, dynamic_size=True, clear_after_read=False,
-                                             element_shape = tf.TensorShape([1,1, dimension]))
+                                             element_shape = tf.TensorShape([1,1, self.dimension]))
         self.n_observations = 0
     
     def write(self, t, observation):

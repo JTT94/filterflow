@@ -27,27 +27,38 @@ class State:
     weights = attr.ib()
     log_likelihoods = attr.ib()
 
+@attr.s
 class StateSeries():
-    def __init__(self, dtype, batch_size, n_particles, dimension):
-        self.batch_size = batch_size
-        self.n_particles = n_particles
-        self.dimension = dimension
+    dtype = attr.ib()
+    batch_size = attr.ib()
+    n_particles = attr.ib()
+    dimension = attr.ib()
+    
+    particles_ta = attr.ib(init=False) 
+    log_weights_ta = attr.ib(init=False)
+    weights_ta = attr.ib(init=False)
+    log_likelihoods_ta = attr.ib(init=False)
         
-        # store states
+        # init series
+    def __attrs_post_init__(self):
         # particles
-        self.particles_ta = tf.TensorArray(dtype, 
+        self.particles_ta = tf.TensorArray(self.dtype, 
                                       size=0, dynamic_size=True, clear_after_read=False,
-                                      element_shape = tf.TensorShape([batch_size,n_particles,dimension]))
+                                      element_shape = tf.TensorShape([self.batch_size,
+                                                                      self.n_particles,
+                                                                      self.dimension]))
         # log_weights
-        self.log_weights_ta = tf.TensorArray(dtype, 
+        self.log_weights_ta = tf.TensorArray(self.dtype, 
                                         size=0, dynamic_size=True, clear_after_read=False,
-                                        element_shape = tf.TensorShape([batch_size,n_particles]))
+                                        element_shape = tf.TensorShape([self.batch_size,
+                                                                        self.n_particles]))
         # weights
-        self.weights_ta = tf.TensorArray(dtype, 
+        self.weights_ta = tf.TensorArray(self.dtype, 
                                     size=0, dynamic_size=True, clear_after_read=False,
-                                    element_shape = tf.TensorShape([batch_size,n_particles]))
+                                    element_shape = tf.TensorShape([self.batch_size,
+                                                                    self.n_particles]))
         # log_likelihoods
-        self.log_likelihoods_ta = tf.TensorArray(dtype, 
+        self.log_likelihoods_ta = tf.TensorArray(self.dtype, 
                                             size=0, dynamic_size=True, clear_after_read=False,
                                             element_shape = tf.TensorShape([1,]))
     
@@ -62,6 +73,7 @@ class StateSeries():
         log_weights = self.log_weights_ta.read(t)
         weights = self.weights_ta.read(t)
         log_likelihoods = self.log_likelihoods_ta.read(t)
+
 
         state = State(batch_size = self.batch_size,
                      n_particles = self.n_particles,
