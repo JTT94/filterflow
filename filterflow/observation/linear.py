@@ -2,7 +2,7 @@ import attr
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from filterflow.base import State, ObservationBase
+from filterflow.base import State, ObservationBase, ObservationSeries
 from filterflow.observation.base import ObservationModelBase
 
 
@@ -10,6 +10,28 @@ from filterflow.observation.base import ObservationModelBase
 class LinearObservation(ObservationBase):
     observation = attr.ib(converter=lambda x: tf.reshape(x, [1, 1, -1]))
 
+@attr.s
+class LinearObservationSeries(ObservationSeries):
+    dtype = attr.ib()
+    dimension = attr.ib()
+    
+    observation_ta = attr.ib(init=False)
+    n_observations = attr.ib(init=False)
+
+    def __attrs_post_init__(self):
+        self.observation_ta = tf.TensorArray(self.dtype, 
+                                             size=0, dynamic_size=True, clear_after_read=False,
+                                             element_shape = tf.TensorShape([1,1, self.dimension]))
+        self.n_observations = 0
+    
+    def write(self, t, observation):
+        self.observation_ta = self.observation_ta.write(t, observation.observation)
+        self.n_observations = self.n_observations + 1
+    
+    def read(self, t):
+        observation = self.observation_ta.read(t)
+        observation = LinearObservation(observation)
+        return observation
 
 class LinearObservationModel(ObservationModelBase):
     def __init__(self, observation_matrix: tf.Tensor, error_rv: tfp.distributions.Distribution,
