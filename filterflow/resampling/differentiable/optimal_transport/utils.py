@@ -2,6 +2,15 @@ import tensorflow as tf
 
 
 @tf.function
+def diameter(tensor):
+    stddevs = tf.math.reduce_std(tensor, 1)
+    return tf.reduce_max(stddevs, 1)
+
+@tf.function
+def dampening(ε, ρ):
+    return 1 / ( 1 + ε / ρ )
+
+@tf.function
 def softmin(epsilon: tf.Tensor, cost_matrix: tf.Tensor, f: tf.Tensor) -> tf.Tensor:
     """Implementation of softmin function
 
@@ -12,10 +21,12 @@ def softmin(epsilon: tf.Tensor, cost_matrix: tf.Tensor, f: tf.Tensor) -> tf.Tens
     :return:
     """
     n = cost_matrix.shape[1]
-    f_ = tf.reshape(f, (-1, n, 1))
-    temp_val = f_ - cost_matrix / epsilon
-    log_sum_exp = tf.reduce_logsumexp(temp_val, axis=1)
-    return -epsilon * log_sum_exp
+    b = cost_matrix.shape[0]
+
+    f_ = tf.reshape(f, (b, 1, n))
+    temp_val = f_ - cost_matrix / tf.reshape(epsilon, (b, 1, 1))
+    log_sum_exp = tf.reduce_logsumexp(temp_val, axis=2)
+    return -tf.reshape(epsilon, (b, 1)) * log_sum_exp
 
 
 @tf.function
