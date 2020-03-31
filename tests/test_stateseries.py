@@ -173,4 +173,5 @@ class TestStateSeries(tf.test.TestCase):
             self.assertAllEqual(state.log_likelihoods, recorded_state.log_likelihoods)
             self.assertAllEqual(state.log_weights, recorded_state.log_weights)
 
-tf.test.main()
+if __name__ == "__main__":
+    tf.test.main()
