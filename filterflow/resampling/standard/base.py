@@ -4,7 +4,7 @@ import attr
 import tensorflow as tf
 
 from filterflow.base import State
-from filterflow.resampling.base import ResamplerBase
+from filterflow.resampling.base import ResamplerBase, resample
 
 
 @tf.function
@@ -38,8 +38,6 @@ def _resample(particles: tf.Tensor, weights: tf.Tensor, log_weights: tf.Tensor, 
     log_weights = tf.where(tf.reshape(flags, [batch_size, 1]),
                            uniform_log_weights,
                            log_weights)
-
-
 
     return particles, weights, log_weights
 
@@ -79,13 +77,19 @@ class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
         # TODO: We should be able to get log spacings directly to always stay in log space.
         indices = _discrete_percentile_function(spacings, n_particles, self._on_log, state.weights,
                                                 state.log_weights)
-        resampled_particles, resampled_weights, resampled_log_weights = _resample(state.particles,
-                                                                                  state.weights,
-                                                                                  state.log_weights,
-                                                                                  indices,
-                                                                                  flags,
-                                                                                  n_particles,
-                                                                                  batch_size)
+        new_particles = tf.gather(state.particles, indices, axis=1, batch_dims=1, validate_indices=False)
+
+        float_n_particles = tf.cast(n_particles, float)
+        uniform_weights = tf.ones_like(state.weights) / float_n_particles
+        uniform_log_weights = tf.zeros_like(state.log_weights) - tf.math.log(float_n_particles)
+
+        resampled_particles, resampled_weights, resampled_log_weights = resample(state.particles,
+                                                                                 new_particles,
+                                                                                 state.weights,
+                                                                                 uniform_weights,
+                                                                                 state.log_weights,
+                                                                                 uniform_log_weights,
+                                                                                 flags)
 
         return attr.evolve(state, particles=resampled_particles, weights=resampled_weights,
                            log_weights=resampled_log_weights)

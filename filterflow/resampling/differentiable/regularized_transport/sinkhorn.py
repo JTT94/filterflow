@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from filterflow.resampling.differentiable.optimal_transport.utils import cost, softmin, diameter
+from filterflow.resampling.differentiable.regularized_transport.utils import cost, softmin, diameter
 
 
 # This is very much adapted from Feydy's geomloss work. Hopefully these should merge into one library...

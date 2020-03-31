@@ -71,19 +71,19 @@ class TestStandardResamplerBase(tf.test.TestCase):
         self.state = State(2, 3, 4,
                            tf.reshape(tf.linspace(0., 2 * 3 * 4 - 1., 2 * 3 * 4),
                                       [2, 3, 4]),
-                           None,
+                           tf.constant([[0.26, 0.5, 0.23999],
+                                        [0.3, 0.31, 0.39]]),
                            tf.constant([[0.26, 0.5, 0.23999],
                                         [0.3, 0.31, 0.39]]),
                            tf.constant([0., 0.]))
 
         self.flags = tf.constant([True, False])
 
-        self.resampler = self.Resampler(False)
+        self.resampler = self.Resampler('Resampler', False)
 
     def test_apply(self):
         resampled_state = self.resampler.apply(self.state, self.flags)
-        self.assertAllEqual(resampled_state.shape, self.state.shape)
-        self.assertAllClose(resampled_state.particles[0, 0], self.state.particles[0,1])
+        self.assertAllEqual(resampled_state.particles.shape, self.state.particles.shape)
+        self.assertAllClose(resampled_state.particles[0, 0], self.state.particles[0, 1])
         self.assertAllClose(resampled_state.particles[0, 1], self.state.particles[0, 1])
         self.assertAllClose(resampled_state.particles[0, 2], self.state.particles[0, 1])
-

@@ -4,8 +4,8 @@ import attr
 import tensorflow as tf
 
 from filterflow.base import State
-from filterflow.resampling.base import ResamplerBase
-from filterflow.resampling.differentiable.optimal_transport.plan import transport
+from filterflow.resampling.base import ResamplerBase, resample
+from filterflow.resampling.differentiable.regularized_transport.plan import transport
 
 
 class RegularisedTransform(ResamplerBase, metaclass=abc.ABCMeta):
@@ -45,8 +45,16 @@ class RegularisedTransform(ResamplerBase, metaclass=abc.ABCMeta):
                                         self.convergence_threshold, state.n_particles, self.max_iter)
         float_n_particles = tf.cast(state.n_particles, float)
         transported_particles = tf.einsum('ijk,ikm->ijm', transport_matrix, state.particles)
-
         uniform_log_weight = -tf.math.log(float_n_particles) * tf.ones_like(state.log_weights)
+        uniform_weights = tf.ones_like(state.weights) / float_n_particles
 
-        return attr.evolve(state, particles=transported_particles, weights=tf.math.exp(uniform_log_weight),
-                           log_weights=uniform_log_weight)
+        resampled_particles, resampled_weights, resampled_log_weights = resample(state.particles,
+                                                                                 transported_particles,
+                                                                                 state.weights,
+                                                                                 uniform_weights,
+                                                                                 state.log_weights,
+                                                                                 uniform_log_weight,
+                                                                                 flags)
+
+        return attr.evolve(state, particles=resampled_particles, weights=resampled_weights,
+                           log_weights=resampled_log_weights)
