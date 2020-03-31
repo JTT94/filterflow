@@ -94,7 +94,11 @@ class ObservationBase(metaclass=abc.ABCMeta):
         self.shape = self.observation.shape
 
 class ObservationSeries(metaclass=abc.ABCMeta):
-    def __init__(self):
+    dtype = attr.ib()
+    dimension = attr.ib()
+    n_observations = attr.ib(init=False)
+    
+    def __attrs_post_init__(self):
         self.n_observations = 0
 
     @abc.abstractmethod
