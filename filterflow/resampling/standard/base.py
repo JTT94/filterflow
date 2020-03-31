@@ -20,7 +20,7 @@ def _discrete_percentile_function(spacings, n_particles, on_log, weights=None, l
         indices = tf.searchsorted(cum_sum, spacings, side='left')
     return tf.clip_by_value(indices, 0, n_particles - 1)
 
-
+@tf.function
 def _resample(particles: tf.Tensor, weights: tf.Tensor, log_weights: tf.Tensor, indices: tf.Tensor,
               flags: tf.Tensor, n_particles: tf.Tensor, batch_size: tf.Tensor):
     float_n_particles = tf.cast(n_particles, float)
@@ -38,8 +38,6 @@ def _resample(particles: tf.Tensor, weights: tf.Tensor, log_weights: tf.Tensor, 
     log_weights = tf.where(tf.reshape(flags, [batch_size, 1]),
                            uniform_log_weights,
                            log_weights)
-
-
 
     return particles, weights, log_weights
 
