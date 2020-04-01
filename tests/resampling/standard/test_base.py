@@ -1,9 +1,7 @@
-import math
-
 import tensorflow as tf
 
 from filterflow.base import State
-from filterflow.resampling.standard.base import _discrete_percentile_function, _resample, StandardResamplerBase
+from filterflow.resampling.standard.base import _discrete_percentile_function, StandardResamplerBase
 
 
 class TestBaseFunctions(tf.test.TestCase):
@@ -18,26 +16,6 @@ class TestBaseFunctions(tf.test.TestCase):
         self.particles = tf.reshape(tf.linspace(0., 2 * 3 * 4 - 1., 2 * 3 * 4),
                                     [2, 3, 4])  # batch_size, n_particles, dimension
         self.flags = tf.constant([False, True])
-
-    def test_resample(self):
-        indices = _discrete_percentile_function(self.spacings,
-                                                self.n_particles,
-                                                True,
-                                                None,
-                                                self.log_weights)
-        resampled_particles, resampled_weights, resampled_log_weights = _resample(self.particles, self.weights,
-                                                                                  self.log_weights, indices,
-                                                                                  self.flags, 3, 2)
-
-        self.assertAllClose(resampled_particles[0], self.particles[0])
-        self.assertAllClose(resampled_weights[0], self.weights[0])
-        self.assertAllClose(resampled_log_weights[0], self.log_weights[0])
-
-        self.assertAllClose(resampled_particles[1][0], self.particles[1][1])
-        self.assertAllClose(resampled_particles[1][1], self.particles[1][1])
-        self.assertAllClose(resampled_particles[1][2], self.particles[1][2])
-        self.assertAllClose(resampled_weights[1], [1 / 3] * 3)
-        self.assertAllClose(resampled_log_weights[1], [-math.log(3)] * 3)
 
     def test_discrete_percentile_function(self):
         indices_from_log = _discrete_percentile_function(self.spacings,

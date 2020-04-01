@@ -42,7 +42,8 @@ class RegularisedTransform(ResamplerBase, metaclass=abc.ABCMeta):
         """
         # TODO: The real batch_size is the sum of flags. We shouldn't do more operations than we need...
         transport_matrix, _ = transport(state.particles, state.log_weights, self.epsilon, self.scaling,
-                                        self.convergence_threshold, state.n_particles, self.max_iter)
+                                        self.convergence_threshold, self.max_iter, state.n_particles)
+
         float_n_particles = tf.cast(state.n_particles, float)
         transported_particles = tf.einsum('ijk,ikm->ijm', transport_matrix, state.particles)
         uniform_log_weight = -tf.math.log(float_n_particles) * tf.ones_like(state.log_weights)

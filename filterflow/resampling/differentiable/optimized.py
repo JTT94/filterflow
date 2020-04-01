@@ -5,31 +5,23 @@ import tensorflow as tf
 
 from filterflow.base import State
 from filterflow.resampling.base import ResamplerBase, resample
-from filterflow.resampling.differentiable.regularized_transport.plan import transport
+from filterflow.resampling.differentiable.optimizer.base import OptimizerBase
 
 
 class OptimizedPointCloud(ResamplerBase, metaclass=abc.ABCMeta):
     """Optimized Point Cloud - docstring to come."""
 
     # TODO: Document this really nicely
-    def __init__(self, loss, scaling, max_iter, convergence_threshold, ricatti_solver, name='OptimizedPointCloud'):
+    def __init__(self, optimizer: OptimizerBase, intermediate_resampler: ResamplerBase, name='OptimizedPointCloud'):
         """Constructor
 
-        :param epsilon: float
-            Regularizer for Sinkhorn iterates
-        :param scaling: float
-            Epsilon scaling for sinkhorn iterates
-        :param max_iter: int
-            max number of iterations in Sinkhorn
-        :param convergence_threshold: float
-            Fixed point iterates converge when potentials don't move more than this anymore
-        :param ricatti_solver: filterflow.resampling.differentiable.ricatti.solver.RicattiSolver
+        :param optimizer: OptimizerBase
+            a tf.Module that takes (log_w_x, w_x, x, log_w_y, w_y, y) and optimizes a loss w.r.t. x
+        :param intermediate_resampler: ResamplerBase
+            Provides the initial point cloud to optimize
         """
-        self.convergence_threshold = convergence_threshold
-        self.max_iter = max_iter
-        self.epsilon = epsilon
-        self.scaling = scaling
-        self.ricatti_solver = ricatti_solver
+        self.optimizer = optimizer
+        self.intermediate_resampler = intermediate_resampler
         super(OptimizedPointCloud, self).__init__(name=name)
 
     def apply(self, state: State, flags: tf.Tensor):
@@ -42,24 +34,18 @@ class OptimizedPointCloud(ResamplerBase, metaclass=abc.ABCMeta):
         :return: resampled state
         :rtype: State
         """
-        # TODO: The real batch_size is the sum of flags. We shouldn't do more operations than we need...
-        transport_matrix, _ = transport(state.particles, state.log_weights, self.epsilon, self.scaling,
-                                        self.convergence_threshold, state.n_particles, self.max_iter)
+        intermediate_state = self.intermediate_resampler.apply(state, flags)
 
-        transport_correction = self.ricatti_solver(transport_matrix, state.weights)
-        float_n_particles = tf.cast(state.n_particles, float)
-
-        transported_particles = tf.einsum('ijk,ikm->ijm', transport_matrix + transport_correction, state.particles)
-
-        uniform_log_weight = -tf.math.log(float_n_particles) * tf.ones_like(state.log_weights)
-        uniform_weights = tf.ones_like(state.weights) / float_n_particles
+        optimized_particles = self.optimizer(intermediate_state.log_weights, intermediate_state.weights,
+                                             intermediate_state.particles, state.log_weights, state.weights,
+                                             state.particles)
 
         resampled_particles, resampled_weights, resampled_log_weights = resample(state.particles,
-                                                                                 transported_particles,
+                                                                                 optimized_particles,
                                                                                  state.weights,
-                                                                                 uniform_weights,
+                                                                                 intermediate_state.weights,
                                                                                  state.log_weights,
-                                                                                 uniform_log_weight,
+                                                                                 intermediate_state.log_weights,
                                                                                  flags)
 
         return attr.evolve(state, particles=resampled_particles, weights=resampled_weights,

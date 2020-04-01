@@ -24,23 +24,26 @@ class BaseSolver(tf.Module, metaclass=abc.ABCMeta):
 class Euler(BaseSolver):
     """A simple explicit Euler solver for infinite horizon problems"""
 
-    def __init__(self, ode_fn, step_size, convergence_threshold, max_horizon=tf.constant(50.), name='Euler'):
+    def __init__(self, step_size, convergence_threshold, max_horizon=tf.constant(50.), name='Euler'):
         super(Euler, self).__init__(name)
-        self.ode_fn = ode_fn
         self.step_size = step_size
         self.convergence_threshold = convergence_threshold
         self.max_horizon = max_horizon
 
-        self._next = tf.function(lambda t, z: self.__next(t, z, ode_fn, step_size))
+        self._next = tf.function(self.__next)
 
     @staticmethod
     def __next(t, z, ode_fn, step_size):
         z_ = z + step_size * ode_fn(t, z)
         return t + step_size, z + step_size * ode_fn(t, (z_ + z) / 2)
 
-    def _solve(self, t_0, z_0):
+    def _solve(self, ode_fn, t_0, z_0):
+        @tf.function
+        def next(t, x):
+            return self._next(t, x, ode_fn, self.step_size)
+
         def body(t, z, _diff):
-            t_, z_ = self._next(t, z)
+            t_, z_ = next(t, z)
             return t_, z_, tf.reduce_max(tf.abs(z_ - z))
 
         def stop(t, z, diff):
@@ -83,8 +86,8 @@ class RicattiSolver(tf.Module):
     @staticmethod
     def __routine(step_size: tf.Tensor, A: tf.Tensor, B: tf.Tensor, horizon: tf.Tensor, threshold: tf.Tensor):
         ode_fn = make_ode_fun(A, B)
-        solver = Euler(ode_fn, step_size, threshold, horizon)
-        res = solver.solve(0., tf.zeros_like(A))
+        solver = Euler(step_size, threshold, horizon)
+        res = solver.solve(ode_fn, 0., tf.zeros_like(A))
 
         def grad(d_delta):
             d_delta_ = _make_admissible(d_delta)

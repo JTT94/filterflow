@@ -20,27 +20,6 @@ def _discrete_percentile_function(spacings, n_particles, on_log, weights=None, l
         indices = tf.searchsorted(cum_sum, spacings, side='left')
     return tf.clip_by_value(indices, 0, n_particles - 1)
 
-@tf.function
-def _resample(particles: tf.Tensor, weights: tf.Tensor, log_weights: tf.Tensor, indices: tf.Tensor,
-              flags: tf.Tensor, n_particles: tf.Tensor, batch_size: tf.Tensor):
-    float_n_particles = tf.cast(n_particles, float)
-    uniform_weights = tf.ones_like(weights) / float_n_particles
-    uniform_log_weights = tf.zeros_like(log_weights) - tf.math.log(float_n_particles)
-    resampled_particles = tf.gather(particles, indices, axis=1, batch_dims=1, validate_indices=False)
-    particles = tf.where(tf.reshape(flags, [batch_size, 1, 1]),
-                         resampled_particles,
-                         particles)
-
-    weights = tf.where(tf.reshape(flags, [batch_size, 1]),
-                       uniform_weights,
-                       weights)
-
-    log_weights = tf.where(tf.reshape(flags, [batch_size, 1]),
-                           uniform_log_weights,
-                           log_weights)
-
-    return particles, weights, log_weights
-
 
 class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
     """Abstract ResamplerBase."""

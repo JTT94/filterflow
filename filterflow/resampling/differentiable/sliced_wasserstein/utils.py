@@ -21,6 +21,22 @@ def random_projections(batch_size, n_projections, embedding_dimension):
     return projections / projections_norm
 
 
+def _cdf_distance(x, y, w_x, w_y):
+    samples = tf.convert_to_tensor(self._samples)
+    num_samples = self._compute_num_samples(samples)
+    event = tf.convert_to_tensor(event, name='event', dtype=self.dtype)
+    event, samples = _broadcast_event_and_samples(event, samples,
+                                                  event_ndims=self._event_ndims)
+    cdf = tf.reduce_sum(
+        tf.cast(
+            tf.reduce_all(
+                samples <= event, axis=tf.range(-self._event_ndims, 0)),
+            dtype=tf.int32),
+        axis=-1) / num_samples
+    if dtype_util.is_floating(self.dtype):
+        cdf = tf.cast(cdf, self.dtype)
+    return cdf
+
 def _cdf_distance(u_values, v_values, u_weights, v_weights):
     """Wildly adapted from Scipy.
     """
