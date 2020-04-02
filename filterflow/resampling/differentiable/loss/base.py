@@ -2,6 +2,7 @@ import abc
 
 import tensorflow as tf
 
+__all__ = ['Loss']
 
 class Loss(tf.Module, metaclass=abc.ABCMeta):
     """A loss between two weighted point clouds."""

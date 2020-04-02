@@ -1,7 +1,7 @@
 import attr
 import tensorflow as tf
 
-from filterflow.base import State, ObservationBase, InputsBase, Module, StateSeries, ObservationSeries
+from filterflow.base import State, Observation, InputsBase, Module, StateSeries, ObservationSeries
 from filterflow.observation.base import ObservationModelBase
 from filterflow.proposal.base import ProposalModelBase
 from filterflow.resampling.base import ResamplerBase
@@ -33,12 +33,12 @@ class SMC(Module):
         """
         return self._transition_model.sample(state, inputs)
     
-    def update(self, state: State, observation: ObservationBase,
-                           inputs: InputsBase):
+    def update(self, state: State, observation: Observation,
+               inputs: InputsBase):
         """
         :param state: State
             current state of the filter
-        :param observation: ObservationBase
+        :param observation: Observation
             observation to compare the state against
         :param inputs: InputsBase
             inputs for the observation_model
@@ -53,12 +53,12 @@ class SMC(Module):
 
         return new_state
 
-    def propose_and_weight(self, state: State, observation: ObservationBase,
+    def propose_and_weight(self, state: State, observation: Observation,
                            inputs: InputsBase):
         """
         :param state: State
             current state of the filter
-        :param observation: ObservationBase
+        :param observation: Observation
             observation to compare the state against
         :param inputs: InputsBase
             inputs for the observation_model

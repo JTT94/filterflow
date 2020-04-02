@@ -2,7 +2,8 @@ import scipy.stats as st
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from filterflow.observation.linear import LinearObservationModel, LinearObservation
+from filterflow.base import Observation
+from filterflow.observation.linear import LinearObservationModel
 
 
 class MockState(object):
@@ -20,7 +21,7 @@ class TestLinearObservationModel(tf.test.TestCase):
 
     def test_loglikelihood(self):
         logprob_1 = self.model.loglikelihood(MockState(self.particles),
-                                             LinearObservation(tf.constant([-1., 0., 1.]), 3))
+                                             Observation(tf.constant([-1., 0., 1.])))
         self.assertAllEqual(logprob_1.shape,
                             self.particles.shape.as_list()[:2])
 

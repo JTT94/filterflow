@@ -24,10 +24,10 @@ class RegularisedTransform(ResamplerBase, metaclass=abc.ABCMeta):
         :param convergence_threshold: float
             Fixed point iterates converge when potentials don't move more than this anymore
         """
-        self.convergence_threshold = convergence_threshold
-        self.max_iter = max_iter
-        self.epsilon = epsilon
-        self.scaling = scaling
+        self.convergence_threshold = tf.cast(convergence_threshold, float)
+        self.max_iter = tf.cast(max_iter, tf.dtypes.int32)
+        self.epsilon = tf.cast(epsilon, float)
+        self.scaling = tf.cast(scaling, float)
         super(RegularisedTransform, self).__init__(name=name)
 
     def apply(self, state: State, flags: tf.Tensor):

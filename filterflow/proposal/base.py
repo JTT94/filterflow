@@ -3,27 +3,27 @@ import abc
 import attr
 import tensorflow as tf
 
-from filterflow.base import State, ObservationBase, InputsBase, Module
+from filterflow.base import State, Observation, InputsBase, Module
 
 
 class ProposalModelBase(Module, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
-    def propose(self, state: State, inputs: InputsBase, observation: ObservationBase):
+    def propose(self, state: State, inputs: InputsBase, observation: Observation):
         """Interface method for particle proposal
 
         :param state: State
             previous particle filter state
         :param inputs: InputsBase
             Control variables (time elapsed, some environment variables, etc)
-        :param observation: ObservationBase
+        :param observation: Observation
             Look ahead observation for adapted particle proposal
         :return: proposed State
         :rtype: State
         """
 
     @abc.abstractmethod
-    def loglikelihood(self, proposed_state: State, state: State, inputs: InputsBase, observation: ObservationBase):
+    def loglikelihood(self, proposed_state: State, state: State, inputs: InputsBase, observation: Observation):
         """Interface method for particle proposal
         :param proposed_state: State
             proposed state
@@ -31,7 +31,7 @@ class ProposalModelBase(Module, metaclass=abc.ABCMeta):
             previous particle filter state
         :param inputs: InputsBase
             Control variables (time elapsed, some environment variables, etc)
-        :param observation: ObservationBase
+        :param observation: Observation
             Look ahead observation for adapted particle proposal
         :return: proposed State
         :rtype: tf.Tensor
@@ -46,12 +46,12 @@ class BootstrapProposalModel(ProposalModelBase):
         super(BootstrapProposalModel, self).__init__(name=name)
         self._transition_model = transition_model
 
-    def propose(self, state: State, inputs: InputsBase, _observation: ObservationBase):
+    def propose(self, state: State, inputs: InputsBase, _observation: Observation):
         """See base class"""
         proposed_particles = self._transition_model.sample(state, inputs)
         return attr.evolve(state, particles=proposed_particles)
 
-    def loglikelihood(self, proposed_state: State, state: State, inputs: InputsBase, observation: ObservationBase):
+    def loglikelihood(self, proposed_state: State, state: State, inputs: InputsBase, observation: Observation):
         """Interface method for particle proposal
         :param proposed_state: State
             proposed state
@@ -59,7 +59,7 @@ class BootstrapProposalModel(ProposalModelBase):
             previous particle filter state
         :param inputs: InputsBase
             Control variables (time elapsed, some environment variables, etc)
-        :param observation: ObservationBase
+        :param observation: Observation
             Look ahead observation for adapted particle proposal
         :return: proposed State
         :rtype: tf.Tensor

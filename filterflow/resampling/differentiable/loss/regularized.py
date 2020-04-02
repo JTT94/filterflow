@@ -3,6 +3,7 @@ import tensorflow as tf
 from filterflow.resampling.differentiable.loss.base import Loss
 from filterflow.resampling.differentiable.regularized_transport.sinkhorn import sinkhorn_potentials
 
+__all__ = ['SinkhornLoss']
 
 @tf.function
 def _scal(weight, potential):
@@ -24,11 +25,11 @@ class SinkhornLoss(Loss):
         super(SinkhornLoss, self).__init__(name=name)
         assert not symmetric, "symmetric sinkhorn should be implemented, just not yet"
 
-        self.symmetric = symmetric
-        self.convergence_threshold = convergence_threshold
-        self.max_iter = max_iter
-        self.epsilon = epsilon
-        self.scaling = scaling
+        self.symmetric = tf.cast(symmetric, bool)
+        self.convergence_threshold = tf.cast(convergence_threshold, float)
+        self.max_iter = tf.cast(max_iter, tf.dtypes.int32)
+        self.epsilon = tf.cast(epsilon, float)
+        self.scaling = tf.cast(scaling, float)
 
     def __call__(self, log_w_x, w_x, x, log_w_y, w_y, y):
         if not self.symmetric:

@@ -25,10 +25,10 @@ class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
             Fixed point iterates converge when potentials don't move more than this anymore
         :param ricatti_solver: filterflow.resampling.differentiable.ricatti.solver.RicattiSolver
         """
-        self.convergence_threshold = convergence_threshold
-        self.max_iter = max_iter
-        self.epsilon = epsilon
-        self.scaling = scaling
+        self.convergence_threshold = tf.cast(convergence_threshold, float)
+        self.max_iter = tf.cast(max_iter, tf.dtypes.int32)
+        self.epsilon = tf.cast(epsilon, float)
+        self.scaling = tf.cast(scaling, float)
         self.ricatti_solver = ricatti_solver
         super(CorrectedRegularizedTransform, self).__init__(name=name)
 
@@ -44,7 +44,7 @@ class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
         """
         # TODO: The real batch_size is the sum of flags. We shouldn't do more operations than we need...
         transport_matrix, _ = transport(state.particles, state.log_weights, self.epsilon, self.scaling,
-                                        self.convergence_threshold, state.n_particles, self.max_iter)
+                                        self.convergence_threshold, self.max_iter, state.n_particles)
 
         transport_correction = self.ricatti_solver(transport_matrix, state.weights)
         float_n_particles = tf.cast(state.n_particles, float)
