@@ -63,3 +63,9 @@ class AlwaysResample(ResamplingCriterionBase):
 
     def apply(self, state: State):
         return True
+
+
+class NeverResample(ResamplingCriterionBase):
+
+    def apply(self, state: State):
+        return False

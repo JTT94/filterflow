@@ -78,7 +78,7 @@ class SMC(Module):
                            log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)
 
 
-    def __call__(self, initial_state: State, observation_series : ObservationSeries, return_final = False):
+    def __call__(self, initial_state: State, observation_series : ObservationSeries):
         """
         :param initial_state: State
             initial state of the filter
