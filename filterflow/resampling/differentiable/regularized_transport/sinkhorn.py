@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from filterflow.resampling.differentiable.optimal_transport.utils import cost, softmin, diameter
+from filterflow.resampling.differentiable.regularized_transport.utils import cost, softmin, diameter
 
 
 # This is very much adapted from Feydy's geomloss work. Hopefully these should merge into one library...
@@ -49,6 +49,7 @@ def simple_sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, epsilon, thresho
 
 @tf.function
 def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, epsilon, particles_diameter, scaling, threshold, max_iter):
+    # TODO: implement the symmetric version
     batch_size = log_alpha.shape[0]
     convergence_flag = tf.ones([batch_size], dtype=bool)
     epsilon_0 = particles_diameter ** 2
@@ -104,7 +105,7 @@ def sinkhorn_potentials(log_alpha, x, log_beta, y, epsilon, scaling, threshold, 
     cost_xy = cost(x, y)
     cost_yx = cost(y, x)
     if scaling < 1.:
-        diameter_ = tf.stop_gradient(2 * diameter(x))
+        diameter_ = tf.stop_gradient(diameter(x))
         a_y, b_x, total_iter = sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, epsilon, diameter_, scaling,
                                              threshold, max_iter)
     else:

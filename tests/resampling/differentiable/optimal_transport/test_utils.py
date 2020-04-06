@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from filterflow.resampling.differentiable.optimal_transport.utils import squared_distances, softmin, cost
+from filterflow.resampling.differentiable.regularized_transport.utils import squared_distances, softmin, cost
 
 
 class TestUtils(tf.test.TestCase):

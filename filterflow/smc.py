@@ -1,7 +1,7 @@
 import attr
 import tensorflow as tf
 
-from filterflow.base import State, ObservationBase, InputsBase, Module, StateSeries, ObservationSeries
+from filterflow.base import State, Observation, InputsBase, Module, DTYPE_TO_STATE_SERIES, ObservationSeries
 from filterflow.observation.base import ObservationModelBase
 from filterflow.proposal.base import ProposalModelBase
 from filterflow.resampling.base import ResamplerBase
@@ -32,13 +32,13 @@ class SMC(Module):
         :rtype: State
         """
         return self._transition_model.sample(state, inputs)
-    
-    def update(self, state: State, observation: ObservationBase,
-                           inputs: InputsBase):
+
+    def update(self, state: State, observation: Observation,
+               inputs: InputsBase):
         """
         :param state: State
             current state of the filter
-        :param observation: ObservationBase
+        :param observation: Observation
             observation to compare the state against
         :param inputs: InputsBase
             inputs for the observation_model
@@ -53,18 +53,18 @@ class SMC(Module):
 
         return new_state
 
-    def propose_and_weight(self, state: State, observation: ObservationBase,
+    def propose_and_weight(self, state: State, observation: Observation,
                            inputs: InputsBase):
         """
         :param state: State
             current state of the filter
-        :param observation: ObservationBase
+        :param observation: Observation
             observation to compare the state against
         :param inputs: InputsBase
             inputs for the observation_model
         :return: Updated weights
         """
-        
+
         proposed_state = self._proposal_model.propose(state, inputs, observation)
         log_weights = self._transition_model.loglikelihood(state, proposed_state, inputs)
         log_weights = log_weights + self._observation_model.loglikelihood(proposed_state, observation)
@@ -77,6 +77,7 @@ class SMC(Module):
         return attr.evolve(proposed_state, weights=tf.math.exp(normalized_log_weights),
                            log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)
 
+<<<<<<< HEAD
 
     def __call__(self, initial_state: State, observation_series : ObservationSeries):
         """
@@ -87,20 +88,52 @@ class SMC(Module):
         :return: tensor array of states
         """
 
+=======
+    # @tf.function
+    def _return_all_loop(self, initial_state: State, observation_series: ObservationSeries):
+>>>>>>> origin/sliced-wasserstein
         # init state
         state = attr.evolve(initial_state)
 
-        # infer dimensions and type
-        batch_size, n_particles, dimension = state.particles.shape
+        # infer dtype
         dtype = state.particles.dtype
 
         # init series
-        states = StateSeries(dtype=dtype, batch_size=batch_size, n_particles=n_particles, dimension=dimension)
+        StateSeriesKlass = DTYPE_TO_STATE_SERIES[dtype]
+        states = StateSeriesKlass(batch_size=state.batch_size,
+                                  n_particles=state.n_particles,
+                                  dimension=state.dimension)
 
         # forward loop
-        for t in range(observation_series.n_observations):
-            observation = observation_series.read(t)
-            state = self.update(state, observation, None)
-            states.write(t, state)
-        return states
+        t = tf.constant(0)
+        for observation in observation_series:
+            # TODO: Use the input data properly
+            state = self.update(state, observation, tf.constant(0.))
+            states = states.write(t, state)
+            t = t + 1
 
+        return states.stack()
+
+    @tf.function
+    def _return_final_loop(self, initial_state: State, observation_series: ObservationSeries):
+        # init state
+        state = attr.evolve(initial_state)
+        # forward loop
+        for observation in observation_series:
+            # TODO: Use the input data properly
+            state = self.update(state, observation, tf.constant(0.))
+
+        return state
+
+    def __call__(self, initial_state: State, observation_series: ObservationSeries, return_final=False):
+        """
+        :param initial_state: State
+            initial state of the filter
+        :param observation_series: ObservationSeries
+            sequence of observation objects
+        :return: tensor array of states
+        """
+        if return_final:
+            return self._return_final_loop(initial_state, observation_series)
+        else:
+            return self._return_all_loop(initial_state, observation_series)

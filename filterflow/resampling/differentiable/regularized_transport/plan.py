@@ -1,7 +1,7 @@
 import tensorflow as tf
 
-from filterflow.resampling.differentiable.optimal_transport.sinkhorn import sinkhorn_potentials
-from filterflow.resampling.differentiable.optimal_transport.utils import cost
+from filterflow.resampling.differentiable.regularized_transport.sinkhorn import sinkhorn_potentials
+from filterflow.resampling.differentiable.regularized_transport.utils import cost
 
 
 @tf.function

@@ -4,7 +4,7 @@ import attr
 import tensorflow as tf
 
 from filterflow.base import State
-from filterflow.resampling.base import ResamplerBase
+from filterflow.resampling.base import ResamplerBase, resample
 
 
 @tf.function
@@ -20,38 +20,20 @@ def _discrete_percentile_function(spacings, n_particles, on_log, weights=None, l
         indices = tf.searchsorted(cum_sum, spacings, side='left')
     return tf.clip_by_value(indices, 0, n_particles - 1)
 
-@tf.function
-def _resample(particles: tf.Tensor, weights: tf.Tensor, log_weights: tf.Tensor, indices: tf.Tensor,
-              flags: tf.Tensor, n_particles: tf.Tensor, batch_size: tf.Tensor):
-    float_n_particles = tf.cast(n_particles, float)
-    uniform_weights = tf.ones_like(weights) / float_n_particles
-    uniform_log_weights = tf.zeros_like(log_weights) - tf.math.log(float_n_particles)
-    resampled_particles = tf.gather(particles, indices, axis=1, batch_dims=1, validate_indices=False)
-    particles = tf.where(tf.reshape(flags, [batch_size, 1, 1]),
-                         resampled_particles,
-                         particles)
-
-    weights = tf.where(tf.reshape(flags, [batch_size, 1]),
-                       uniform_weights,
-                       weights)
-
-    log_weights = tf.where(tf.reshape(flags, [batch_size, 1]),
-                           uniform_log_weights,
-                           log_weights)
-
-    return particles, weights, log_weights
-
 
 class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
     """Abstract ResamplerBase."""
 
-    def __init__(self, name, on_log=True):
+    def __init__(self, name, on_log=True, stop_gradient=True):
         """Constructor
 
         :param on_log: bool
             Should the resampling use log weights
-        """
+        :param stop_gradient: bool
+            Should the resampling step propagate the stitched gradients or not
+       """
         self._on_log = on_log
+        self._stop_gradient = stop_gradient
         super(StandardResamplerBase, self).__init__(name=name)
 
     @staticmethod
@@ -77,13 +59,21 @@ class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
         # TODO: We should be able to get log spacings directly to always stay in log space.
         indices = _discrete_percentile_function(spacings, n_particles, self._on_log, state.weights,
                                                 state.log_weights)
-        resampled_particles, resampled_weights, resampled_log_weights = _resample(state.particles,
-                                                                                  state.weights,
-                                                                                  state.log_weights,
-                                                                                  indices,
-                                                                                  flags,
-                                                                                  n_particles,
-                                                                                  batch_size)
+        new_particles = tf.gather(state.particles, indices, axis=1, batch_dims=1, validate_indices=False)
+        if self._stop_gradient:
+            new_particles = tf.stop_gradient(new_particles)
+
+        float_n_particles = tf.cast(n_particles, float)
+        uniform_weights = tf.ones_like(state.weights) / float_n_particles
+        uniform_log_weights = tf.zeros_like(state.log_weights) - tf.math.log(float_n_particles)
+
+        resampled_particles, resampled_weights, resampled_log_weights = resample(state.particles,
+                                                                                 new_particles,
+                                                                                 state.weights,
+                                                                                 uniform_weights,
+                                                                                 state.log_weights,
+                                                                                 uniform_log_weights,
+                                                                                 flags)
 
         return attr.evolve(state, particles=resampled_particles, weights=resampled_weights,
                            log_weights=resampled_log_weights)

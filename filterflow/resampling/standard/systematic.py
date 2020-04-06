@@ -21,7 +21,7 @@ def _systematic_spacings(n_particles, batch_size):
 
 
 class SystematicResampler(StandardResamplerBase):
-    def __init__(self, name='StandardResamplerBase', on_log=True):
+    def __init__(self, on_log=True, name='StandardResamplerBase'):
         super(SystematicResampler, self).__init__(name, on_log)
 
     @staticmethod
