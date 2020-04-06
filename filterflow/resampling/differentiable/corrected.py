@@ -1,10 +1,10 @@
 import abc
 
-import attr
 import tensorflow as tf
 
 from filterflow.base import State
-from filterflow.resampling.base import ResamplerBase, resample
+from filterflow.resampling.base import ResamplerBase
+from filterflow.resampling.differentiable.biased import apply_transport_matrix
 from filterflow.resampling.differentiable.regularized_transport.plan import transport
 
 
@@ -47,20 +47,4 @@ class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
                                         self.convergence_threshold, self.max_iter, state.n_particles)
 
         transport_correction = self.ricatti_solver(transport_matrix, state.weights)
-        float_n_particles = tf.cast(state.n_particles, float)
-
-        transported_particles = tf.einsum('ijk,ikm->ijm', transport_matrix + transport_correction, state.particles)
-
-        uniform_log_weight = -tf.math.log(float_n_particles) * tf.ones_like(state.log_weights)
-        uniform_weights = tf.ones_like(state.weights) / float_n_particles
-
-        resampled_particles, resampled_weights, resampled_log_weights = resample(state.particles,
-                                                                                 transported_particles,
-                                                                                 state.weights,
-                                                                                 uniform_weights,
-                                                                                 state.log_weights,
-                                                                                 uniform_log_weight,
-                                                                                 flags)
-
-        return attr.evolve(state, particles=resampled_particles, weights=resampled_weights,
-                           log_weights=resampled_log_weights)
+        return apply_transport_matrix(state, transport_matrix + transport_correction, flags)

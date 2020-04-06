@@ -8,6 +8,27 @@ from filterflow.resampling.base import ResamplerBase, resample
 from filterflow.resampling.differentiable.regularized_transport.plan import transport
 
 
+def apply_transport_matrix(state: State, transport_matrix: tf.Tensor, flags: tf.Tensor):
+    float_n_particles = tf.cast(state.n_particles, float)
+    transported_particles = tf.einsum('ijk,ikm->ijm', transport_matrix, state.particles)
+    uniform_log_weights = -tf.math.log(float_n_particles) * tf.ones_like(state.log_weights)
+    uniform_weights = tf.ones_like(state.weights) / float_n_particles
+
+    resampled_particles = resample(state.particles, transported_particles, flags)
+    resampled_weights = resample(state.weights, uniform_weights, flags)
+    resampled_log_weights = resample(state.log_weights, uniform_log_weights, flags)
+
+    additional_variables = {}
+
+    for additional_state_variable in state.ADDITIONAL_STATE_VARIABLES:
+        state_variable = getattr(state, additional_state_variable)
+        transported_state_variable = tf.einsum('ijk,ikm->ijm', transport_matrix, state.particles)
+        additional_variables[additional_state_variable] = resample(state_variable, transported_state_variable, flags)
+
+    return attr.evolve(state, particles=resampled_particles, weights=resampled_weights,
+                       log_weights=resampled_log_weights)
+
+
 class RegularisedTransform(ResamplerBase, metaclass=abc.ABCMeta):
     """Regularised Transform - docstring to come."""
 
@@ -44,18 +65,4 @@ class RegularisedTransform(ResamplerBase, metaclass=abc.ABCMeta):
         transport_matrix, _ = transport(state.particles, state.log_weights, self.epsilon, self.scaling,
                                         self.convergence_threshold, self.max_iter, state.n_particles)
 
-        float_n_particles = tf.cast(state.n_particles, float)
-        transported_particles = tf.einsum('ijk,ikm->ijm', transport_matrix, state.particles)
-        uniform_log_weight = -tf.math.log(float_n_particles) * tf.ones_like(state.log_weights)
-        uniform_weights = tf.ones_like(state.weights) / float_n_particles
-
-        resampled_particles, resampled_weights, resampled_log_weights = resample(state.particles,
-                                                                                 transported_particles,
-                                                                                 state.weights,
-                                                                                 uniform_weights,
-                                                                                 state.log_weights,
-                                                                                 uniform_log_weight,
-                                                                                 flags)
-
-        return attr.evolve(state, particles=resampled_particles, weights=resampled_weights,
-                           log_weights=resampled_log_weights)
+        return apply_transport_matrix(state, transport_matrix, flags)

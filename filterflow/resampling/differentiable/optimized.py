@@ -39,14 +39,13 @@ class OptimizedPointCloud(ResamplerBase, metaclass=abc.ABCMeta):
         optimized_particles = self.optimizer(intermediate_state.log_weights, intermediate_state.weights,
                                              intermediate_state.particles, state.log_weights, state.weights,
                                              state.particles)
+        float_n_particles = tf.cast(state.n_particles, float)
+        uniform_log_weights = -tf.math.log(float_n_particles) * tf.ones_like(state.log_weights)
+        uniform_weights = tf.ones_like(state.weights) / float_n_particles
 
-        resampled_particles, resampled_weights, resampled_log_weights = resample(state.particles,
-                                                                                 optimized_particles,
-                                                                                 state.weights,
-                                                                                 intermediate_state.weights,
-                                                                                 state.log_weights,
-                                                                                 intermediate_state.log_weights,
-                                                                                 flags)
+        resampled_particles = resample(intermediate_state.particles, optimized_particles, flags)
+        resampled_weights = resample(intermediate_state.weights, uniform_weights, flags)
+        resampled_log_weights = resample(intermediate_state.log_weights, uniform_log_weights, flags)
 
         return attr.evolve(state, particles=resampled_particles, weights=resampled_weights,
                            log_weights=resampled_log_weights)

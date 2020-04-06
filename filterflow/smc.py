@@ -1,7 +1,7 @@
 import attr
 import tensorflow as tf
 
-from filterflow.base import State, Observation, InputsBase, Module, DTYPE_TO_STATE_SERIES, ObservationSeries
+from filterflow.base import State, Observation, InputsBase, Module, DTYPE_TO_STATE_SERIES
 from filterflow.observation.base import ObservationModelBase
 from filterflow.proposal.base import ProposalModelBase
 from filterflow.resampling.base import ResamplerBase
@@ -77,8 +77,8 @@ class SMC(Module):
         return attr.evolve(proposed_state, weights=tf.math.exp(normalized_log_weights),
                            log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)
 
-    # @tf.function
-    def _return_all_loop(self, initial_state: State, observation_series: ObservationSeries):
+    @tf.function
+    def _return_all_loop(self, initial_state: State, observation_series: tf.data.Dataset):
         # init state
         state = attr.evolve(initial_state)
 
@@ -92,17 +92,15 @@ class SMC(Module):
                                   dimension=state.dimension)
 
         # forward loop
-        t = tf.constant(0)
-        for observation in observation_series:
+        for t, observation in observation_series.enumerate():
             # TODO: Use the input data properly
             state = self.update(state, observation, tf.constant(0.))
             states = states.write(t, state)
-            t = t + 1
 
         return states.stack()
 
     @tf.function
-    def _return_final_loop(self, initial_state: State, observation_series: ObservationSeries):
+    def _return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset):
         # init state
         state = attr.evolve(initial_state)
         # forward loop
@@ -112,7 +110,7 @@ class SMC(Module):
 
         return state
 
-    def __call__(self, initial_state: State, observation_series: ObservationSeries, return_final=False):
+    def __call__(self, initial_state: State, observation_series: tf.data.Dataset, return_final=False):
         """
         :param initial_state: State
             initial state of the filter
