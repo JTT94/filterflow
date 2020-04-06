@@ -1,3 +1,6 @@
+import attr
+
+
 class AuxiliaryProposal(ProposalModelBase):
     """Standard bootstrap proposal: directly uses the transition model as a proposal.
     """
