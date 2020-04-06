@@ -24,13 +24,16 @@ def _discrete_percentile_function(spacings, n_particles, on_log, weights=None, l
 class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
     """Abstract ResamplerBase."""
 
-    def __init__(self, name, on_log=True):
+    def __init__(self, name, on_log=True, stop_gradient=True):
         """Constructor
 
         :param on_log: bool
             Should the resampling use log weights
-        """
+        :param stop_gradient: bool
+            Should the resampling step propagate the stitched gradients or not
+       """
         self._on_log = on_log
+        self._stop_gradient = stop_gradient
         super(StandardResamplerBase, self).__init__(name=name)
 
     @staticmethod
@@ -57,6 +60,8 @@ class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
         indices = _discrete_percentile_function(spacings, n_particles, self._on_log, state.weights,
                                                 state.log_weights)
         new_particles = tf.gather(state.particles, indices, axis=1, batch_dims=1, validate_indices=False)
+        if self._stop_gradient:
+            new_particles = tf.stop_gradient(new_particles)
 
         float_n_particles = tf.cast(n_particles, float)
         uniform_weights = tf.ones_like(state.weights) / float_n_particles
