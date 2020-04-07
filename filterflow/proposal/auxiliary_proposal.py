@@ -1,6 +1,7 @@
 
 import attr
-
+from filterflow.proposal.base import ProposalModelBase
+from filterflow.base import State, InputsBase, Observation
 
 class AuxiliaryProposal(ProposalModelBase):
     """Standard bootstrap proposal: directly uses the transition model as a proposal.
@@ -11,7 +12,7 @@ class AuxiliaryProposal(ProposalModelBase):
         self._proposal_model = proposal_model
         self._aux_ll = auxiliary_loglikelihood
 
-    def propose(self, state: State, inputs: InputsBase, _observation: ObservationBase):
+    def propose(self, state: State, inputs: InputsBase, _observation: Observation):
         """See base class"""
         proposed_particles = self._transition_model.sample(state, inputs)
         return attr.evolve(state, particles=proposed_particles)

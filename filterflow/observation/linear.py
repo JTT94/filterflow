@@ -1,8 +1,8 @@
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from filterflow.base import State, Observation
-from filterflow.observation.base import ObservationModelBase
+from filterflow.base import State, Observation, InputsBase
+from filterflow.observation.base import ObservationModelBase, ObservationSampler
 
 
 class LinearObservationModel(ObservationModelBase):
@@ -23,3 +23,25 @@ class LinearObservationModel(ObservationModelBase):
         """
         error = observation.observation - tf.linalg.matvec(self._observation_matrix, state.particles)
         return self._error_rv.log_prob(error)
+
+class LinearObservationSampler(LinearObservationModel, ObservationSampler):
+    
+    def __init__(self, observation_matrix: tf.Tensor, error_rv: tfp.distributions.Distribution,
+                 name = "LinearObservationSampler"):
+        super(LinearObservationSampler, self).__init__(observation_matrix= observation_matrix,
+                                                       error_rv = error_rv,
+                                                       name=name)
+    
+    def sample(self, state: State, inputs: InputsBase=None):
+        """Samples a new proposed state conditionally on prior state and some inputs
+        :param state: State
+            State of the filter at t-1
+        :param inputs: InputsBase
+            Input for transition model
+        :return: sampled Observation
+        :rtype: Observation
+        """
+        pushed_particles = tf.linalg.matvec(self._observation_matrix, state.particles)
+        res = pushed_particles + self._error_rv.sample([state.batch_size, state.n_particles])
+        return Observation(res)
+        

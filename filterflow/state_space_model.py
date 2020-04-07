@@ -1,6 +1,6 @@
 import attr
 import tensorflow as tf
-
+import numpy as np
 from filterflow.base import State, Observation, InputsBase, Module, StateSeries, DTYPE_TO_OBSERVATION_SERIES, DTYPE_TO_STATE_SERIES
 from filterflow.observation.base import ObservationSampler
 from filterflow.transition.base import TransitionModelBase
@@ -47,7 +47,7 @@ class StateSpaceModel(Module):
                             log_likelihoods=log_likelihoods)
         return initial_state
 
-    def __call__(self, state_value: tf.Tensor, n_steps : int):
+    def sample(self, state_value: tf.Tensor, n_steps : int):
         """
         :param state_value: Tensor
             initial state of the filter
@@ -87,3 +87,16 @@ class StateSpaceModel(Module):
 
         return states, observations
 
+    def numpy(self, state_series, observation_series):
+        T = observation_series.size()
+        np_obs = np.array([observation_series.read(t).observation.numpy().squeeze() for t in range(T)])
+        np_states = np.array([state_series.read(t).particles.numpy().squeeze() for t in range(T)])
+        return np_states, np_obs
+
+    def __call__(self, state_value: tf.Tensor, n_steps : int, return_numpy = True):
+        states, observations = self.sample(state_value, n_steps)
+
+        if return_numpy:
+            states, observations = self.numpy(states, observations)
+        
+        return states, observations
