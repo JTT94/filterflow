@@ -47,9 +47,9 @@ class StateSpaceModel(Module):
                             log_likelihoods=log_likelihoods)
         return initial_state
 
-    def __call__(self, initial_state: tf.Tensor, n_steps : int):
+    def __call__(self, state_value: tf.Tensor, n_steps : int):
         """
-        :param initial_state: State
+        :param state_value: Tensor
             initial state of the filter
         :return: tuple of tensor array of states, tensor array of observations
         :rtype: (StateSeries, ObservationSeries)
@@ -57,10 +57,10 @@ class StateSpaceModel(Module):
         """
 
         # infer dtype
-        dtype = initial_state.dtype
+        dtype = state_value.dtype
 
         # init particle
-        initial_state = self.init_state(initial_state)
+        initial_state = self.init_state(state_value)
         state = attr.evolve(initial_state)
         
         # get observation dim
