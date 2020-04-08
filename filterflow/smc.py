@@ -95,7 +95,7 @@ class SMC(Module):
         for t, observation in observation_series.enumerate():
             # TODO: Use the input data properly
             state = self.update(state, observation, tf.constant(0.))
-            states = states.write(t, state)
+            states = states.write(tf.cast(t, tf.dtypes.int32), state)
 
         return states.stack()
 
