@@ -78,7 +78,7 @@ class SMC(Module):
                            log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)
 
     @tf.function
-    def _return_all_loop(self, initial_state: State, observation_series: tf.data.Dataset):
+    def return_all_loop(self, initial_state: State, observation_series: tf.data.Dataset):
         # init state
         state = attr.evolve(initial_state)
 
@@ -92,30 +92,33 @@ class SMC(Module):
                                   dimension=state.dimension)
 
         # forward loop
-<<<<<<< HEAD
-        for t in range(observation_series.size()):
-=======
-        for t, observation in observation_series.enumerate():
->>>>>>> origin/sliced-wasserstein
+        for t, obs in enumerate(observation_series):
             # TODO: Use the input data properly
-            observation = observation_series.read(t)
+            observation = Observation(obs)
             state = self.update(state, observation, tf.constant(0.))
             states = states.write(t, state)
 
         return states.stack()
 
     @tf.function
-<<<<<<< HEAD
-    def _return_final_loop(self, initial_state: State, observation_series: list):
-=======
-    def _return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset):
->>>>>>> origin/sliced-wasserstein
+    def return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset):
         # init state
         state = attr.evolve(initial_state)
         # forward loop
-        for t, observation in enumerate(observation_series):
+        for t, obs in enumerate(observation_series):
             # TODO: Use the input data properly
-            #observation = observation_series.read(t)
+            observation = Observation(obs)
+            state = self.update(state, observation, tf.constant(0.))
+
+        return state
+
+    def no_dec_return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset):
+        # init state
+        state = attr.evolve(initial_state)
+        # forward loop
+        for t, obs in enumerate(observation_series):
+            # TODO: Use the input data properly
+            observation = Observation(obs)
             state = self.update(state, observation, tf.constant(0.))
 
         return state
@@ -129,6 +132,6 @@ class SMC(Module):
         :return: tensor array of states
         """
         if return_final:
-            return self._return_final_loop(initial_state, observation_series)
+            return self.return_final_loop(initial_state, observation_series)
         else:
-            return self._return_all_loop(initial_state, observation_series)
+            return self.return_all_loop(initial_state, observation_series)

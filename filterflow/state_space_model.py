@@ -87,16 +87,8 @@ class StateSpaceModel(Module):
 
         return states, observations
 
-    def numpy(self, state_series, observation_series):
-        T = observation_series.size()
-        np_obs = np.array([observation_series.read(t).observation.numpy().squeeze() for t in range(T)])
-        np_states = np.array([state_series.read(t).particles.numpy().squeeze() for t in range(T)])
-        return np_states, np_obs
 
-    def __call__(self, state_value: tf.Tensor, n_steps : int, return_numpy = True):
+    def __call__(self, state_value: tf.Tensor, n_steps : int):
         states, observations = self.sample(state_value, n_steps)
-
-        if return_numpy:
-            states, observations = self.numpy(states, observations)
         
         return states, observations

@@ -208,7 +208,9 @@ class Observation:
     def shape(self):
         return self.observation.shape
 
-
+    def __attrs_post_init__(self):
+        if isinstance(self.observation, Observation):
+            self.observation = self.observation.observation
 @attr.s(frozen=True)
 class ObservationSeries(DataSeries, metaclass=abc.ABCMeta):
     DTYPE = None
