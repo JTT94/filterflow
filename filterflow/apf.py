@@ -14,7 +14,7 @@ from filterflow.utils import normalize
 class AuxiliaryParticleFilter(SMC):
     def __init__(self, observation_model: ObservationModelBase, transition_model: TransitionModelBase,
                  proposal_model: AuxiliaryProposal, resampling_criterion: ResamplingCriterionBase,
-                 resampling_method: ResamplerBase, name='SMC'):
+                 resampling_method: ResamplerBase, name='AuxiliaryParticleFilter'):
         super(AuxiliaryParticleFilter, self).__init__(observation_model, transition_model,
                  proposal_model, resampling_criterion, resampling_method, name=name)
 

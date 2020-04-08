@@ -101,13 +101,13 @@ class SMC(Module):
         return states.stack()
 
     @tf.function
-    def _return_final_loop(self, initial_state: State, observation_series: ObservationSeries):
+    def _return_final_loop(self, initial_state: State, observation_series: list):
         # init state
         state = attr.evolve(initial_state)
         # forward loop
-        for t in range(observation_series.size()):
+        for t, observation in enumerate(observation_series):
             # TODO: Use the input data properly
-            observation = observation_series.read(t)
+            #observation = observation_series.read(t)
             state = self.update(state, observation, tf.constant(0.))
 
         return state
