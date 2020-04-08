@@ -67,13 +67,18 @@ class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
         uniform_weights = tf.ones_like(state.weights) / float_n_particles
         uniform_log_weights = tf.zeros_like(state.log_weights) - tf.math.log(float_n_particles)
 
-        resampled_particles, resampled_weights, resampled_log_weights = resample(state.particles,
-                                                                                 new_particles,
-                                                                                 state.weights,
-                                                                                 uniform_weights,
-                                                                                 state.log_weights,
-                                                                                 uniform_log_weights,
-                                                                                 flags)
+        resampled_particles = resample(state.particles, new_particles, flags)
+        resampled_weights = resample(state.weights, uniform_weights, flags)
+        resampled_log_weights = resample(state.log_weights, uniform_log_weights, flags)
+
+        additional_variables = {}
+
+        for additional_state_variable in state.ADDITIONAL_STATE_VARIABLES:
+            state_variable = getattr(state, additional_state_variable)
+            new_state_variable = tf.gather(state_variable, indices, axis=1, batch_dims=1, validate_indices=False)
+            if self._stop_gradient:
+                new_state_variable = tf.stop_gradient(new_state_variable)
+            additional_variables[additional_state_variable] = resample(state_variable, new_state_variable, flags)
 
         return attr.evolve(state, particles=resampled_particles, weights=resampled_weights,
-                           log_weights=resampled_log_weights)
+                           log_weights=resampled_log_weights, **additional_variables)

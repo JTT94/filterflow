@@ -43,15 +43,17 @@ class DataSeries(metaclass=abc.ABCMeta):
 
 
 def _non_scalar_validator(_instance, attribute, value, ndim=None):
-    if ndim is None:
+    if ndim is None or value is None or isinstance(value, tf.DType):
         return
+
     if hasattr(value, 'shape'):
         value_shape = value.shape
     elif isinstance(value, tf.TensorShape):
         value_shape = value
     else:
         raise ValueError(f"value {value} for attribute {attribute} should have an attribute shape or be a TensorShape.")
-    assert len(value_shape) == ndim, f"value {value} for attribute {attribute} should have ndim {ndim}."
+    if hasattr(value_shape, '__len__'):
+        assert len(value_shape) == ndim, f"value {value} for attribute {attribute} should have ndim {ndim}."
 
 
 _dim_3_validator = partial(_non_scalar_validator, ndim=3)
@@ -64,6 +66,7 @@ class State:
     """Particle Filter State
     State encapsulates the information about the particle filter current state.
     """
+    ADDITIONAL_STATE_VARIABLES = ()
 
     particles = attr.ib(validator=_dim_3_validator)
     log_weights = attr.ib(validator=_dim_2_validator)
@@ -82,6 +85,10 @@ class State:
     def dimension(self):
         return self.particles.shape[2]
 
+@attr.s
+class StateWithMemory(State):
+    ADDITIONAL_STATE_VARIABLES = ('rnn_state',)
+    rnn_state = attr.ib(validator=_dim_3_validator)
 
 @attr.s(frozen=True)
 class StateSeries(DataSeries, metaclass=abc.ABCMeta):
@@ -230,8 +237,7 @@ class ObservationSeries(DataSeries, metaclass=abc.ABCMeta):
     def stack(self):
         observations = self._observation.stack()
         observations_dataset = tf.data.Dataset.from_tensor_slices(observations)
-        observations_dataset.map(Observation)
-        return attr.evolve(self, observation=observations_dataset)
+        return observations_dataset.map(Observation)
 
     def read(self, t):
         if isinstance(self._observation, tf.TensorArray):
@@ -241,11 +247,6 @@ class ObservationSeries(DataSeries, metaclass=abc.ABCMeta):
         if isinstance(observation, Observation):
             return observation
         return Observation(observation)
-
-    def __iter__(self):
-        if isinstance(self._observation, tf.data.Dataset):
-            return self._observation
-        raise ValueError(f"{self._observation} of {self} is not iterable")
 
     def size(self):
         if isinstance(self._observation, tf.TensorArray):
