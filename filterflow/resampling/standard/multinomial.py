@@ -21,7 +21,7 @@ def _uniform_spacings(n_particles, batch_size):
 
 
 class MultinomialResampler(StandardResamplerBase):
-    def __init__(self, name='MultinomialResampler', on_log=True):
+    def __init__(self, on_log=True, name='MultinomialResampler'):
         super(MultinomialResampler, self).__init__(name, on_log)
 
     @staticmethod

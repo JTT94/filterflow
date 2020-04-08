@@ -20,7 +20,7 @@ def _stratified_spacings(n_particles, batch_size):
 
 
 class StratifiedResampler(StandardResamplerBase):
-    def __init__(self, name='StratifiedResampler', on_log=True):
+    def __init__(self, on_log=True, name='StratifiedResampler'):
         super(StratifiedResampler, self).__init__(name, on_log)
 
     @staticmethod

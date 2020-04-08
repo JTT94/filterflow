@@ -1,7 +1,7 @@
 import tensorflow as tf
 
-from filterflow.resampling.differentiable.optimal_transport.sinkhorn import sinkhorn_potentials
-from filterflow.resampling.differentiable.optimal_transport.utils import cost
+from filterflow.resampling.differentiable.regularized_transport.sinkhorn import sinkhorn_potentials
+from filterflow.resampling.differentiable.regularized_transport.utils import cost
 
 
 @tf.function
@@ -56,7 +56,7 @@ def transport(x, logw, eps, scaling, threshold, max_iter, n):
     float_n = tf.cast(n, float)
     uniform_log_weight = -tf.math.log(float_n) * tf.ones_like(logw)
 
-    alpha, beta, total_iterations = sinkhorn_potentials(logw, x, uniform_log_weight, x, eps, scaling, threshold,
-                                                        max_iter)
+    alpha, beta, _, _, total_iterations = sinkhorn_potentials(logw, x, uniform_log_weight, x, eps, scaling, threshold,
+                                                              max_iter)
     transport_matrix = transport_from_potentials(x, alpha, beta, eps, logw, float_n)
     return transport_matrix, total_iterations

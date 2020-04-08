@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from filterflow.resampling.differentiable.optimal_transport.plan import transport
+from filterflow.resampling.differentiable.regularized_transport.plan import transport
 from filterflow.resampling.differentiable.ricatti.solver import _make_admissible, _make_nil, RicattiSolver, make_ode_fun
 
 

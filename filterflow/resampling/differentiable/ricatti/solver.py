@@ -17,30 +17,33 @@ def _make_admissible(tensor):
 
 class BaseSolver(tf.Module, metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def solve(self, t_0, z_0):
+    def solve(self, ode_fn, t_0, z_0):
         """Returns value at infinity"""
 
 
 class Euler(BaseSolver):
     """A simple explicit Euler solver for infinite horizon problems"""
 
-    def __init__(self, ode_fn, step_size, convergence_threshold, max_horizon=tf.constant(50.), name='Euler'):
+    def __init__(self, step_size, convergence_threshold, max_horizon=tf.constant(50.), name='Euler'):
         super(Euler, self).__init__(name)
-        self.ode_fn = ode_fn
         self.step_size = step_size
         self.convergence_threshold = convergence_threshold
         self.max_horizon = max_horizon
 
-        self._next = tf.function(lambda t, z: self.__next(t, z, ode_fn, step_size))
+        self._next = tf.function(self.__next)
 
     @staticmethod
     def __next(t, z, ode_fn, step_size):
         z_ = z + step_size * ode_fn(t, z)
         return t + step_size, z + step_size * ode_fn(t, (z_ + z) / 2)
 
-    def _solve(self, t_0, z_0):
+    def _solve(self, ode_fn, t_0, z_0):
+        @tf.function
+        def next(t, x):
+            return self._next(t, x, ode_fn, self.step_size)
+
         def body(t, z, _diff):
-            t_, z_ = self._next(t, z)
+            t_, z_ = next(t, z)
             return t_, z_, tf.reduce_max(tf.abs(z_ - z))
 
         def stop(t, z, diff):
@@ -75,16 +78,14 @@ class RicattiSolver(tf.Module):
         self.step_size = tf.cast(step_size, float)
         self.horizon = tf.cast(horizon, float)
         self.threshold = tf.cast(threshold, float)
+        self.solver = Euler(self.step_size, self.threshold, self.horizon)
         self._routine = tf.custom_gradient(
-            lambda A, B: self.__routine(self.step_size, A, B, self.horizon, self.threshold))
-        self._make_B = tf.function(self.__make_B)
-        self._make_A = tf.function(self.__make_A)
+            lambda A, B: self._routine_without_custom_grad(self.solver, A, B))
 
     @staticmethod
-    def __routine(step_size: tf.Tensor, A: tf.Tensor, B: tf.Tensor, horizon: tf.Tensor, threshold: tf.Tensor):
+    def _routine_without_custom_grad(solver: BaseSolver, A: tf.Tensor, B: tf.Tensor):
         ode_fn = make_ode_fun(A, B)
-        solver = Euler(ode_fn, step_size, threshold, horizon)
-        res = solver.solve(0., tf.zeros_like(A))
+        res = solver.solve(ode_fn, 0., tf.zeros_like(A))
 
         def grad(d_delta):
             d_delta_ = _make_admissible(d_delta)
@@ -93,19 +94,22 @@ class RicattiSolver(tf.Module):
         return res, grad
 
     @staticmethod
-    def __make_B(transport_matrix):
+    @tf.function
+    def _make_B(transport_matrix):
         return tf.transpose(transport_matrix, perm=[0, 2, 1])
 
     @staticmethod
-    def __make_A(transport_matrix, w, n_particles):
+    @tf.function
+    def _make_A(transport_matrix, w, n_particles):
         W = tf.linalg.diag(w)
         TT = tf.matmul(transport_matrix, transport_matrix, transpose_a=True)
         return _make_admissible(n_particles * W - TT)
 
+    @tf.function
     def __call__(self, transport_matrix, w):
         n_particles = w.shape[1]
         float_n_particles = tf.cast(n_particles, float)
         B = self._make_B(transport_matrix)
-        A = self.__make_A(transport_matrix, w, float_n_particles)
+        A = self._make_A(transport_matrix, w, float_n_particles)
         final_delta = self._routine(A, B)
         return final_delta

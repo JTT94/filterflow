@@ -5,6 +5,13 @@ import tensorflow as tf
 from filterflow.base import State, Module
 
 
+@tf.function
+def resample(tensor: tf.Tensor, new_tensor: tf.Tensor, flags: tf.Tensor):
+    ndim = len(tensor.shape)
+    shape = [-1] + [1] * (ndim - 1)
+    return tf.where(tf.reshape(flags, shape), new_tensor, tensor)
+
+
 class ResamplerBase(Module, metaclass=abc.ABCMeta):
     """Abstract ResamplerBase."""
 
