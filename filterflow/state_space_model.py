@@ -65,25 +65,20 @@ class StateSpaceModel(Module):
         
         # get observation dim
         test_obs = self.sample_observation(state)
-        obs_dim = test_obs.observation.shape[2]
+        obs_dim = test_obs.shape[2]
         
         # init tensor arrays for recording states and outputs
          # init series
-        states_constructor = DTYPE_TO_STATE_SERIES[dtype]
-        states = states_constructor(batch_size=state.batch_size,
-                                  n_particles=state.n_particles,
-                                  dimension=state.dimension)
-
-        observations_constructor = DTYPE_TO_OBSERVATION_SERIES[dtype]
-        observations = observations_constructor(shape=[1,1, obs_dim])
+        states = []
+        observations = []
         # forward loop
         for t in range(n_steps):
             state_particle = self.sample_state(state)
             state = attr.evolve(state, particles=state_particle)
             observation = self.sample_observation(state)
             
-            observations = observations.write(t, observation)
-            states = states.write(t, state)
+            observations.append(observation)
+            states.append(state)
 
         return states, observations
 

@@ -1,7 +1,8 @@
 
 import attr
+import tensorflow as tf
 from filterflow.proposal.base import ProposalModelBase
-from filterflow.base import State, InputsBase, Observation
+from filterflow.base import State, InputsBase
 
 class AuxiliaryProposal(ProposalModelBase):
     """Standard bootstrap proposal: directly uses the transition model as a proposal.
@@ -12,12 +13,12 @@ class AuxiliaryProposal(ProposalModelBase):
         self._proposal_model = proposal_model
         self._aux_ll = auxiliary_loglikelihood
 
-    def propose(self, state: State, inputs: InputsBase, _observation: Observation):
+    def propose(self, state: State, inputs: InputsBase, _observation: tf.Tensor):
         """See base class"""
         proposed_particles = self._transition_model.sample(state, inputs)
         return attr.evolve(state, particles=proposed_particles)
 
-    def loglikelihood(self, proposed_state: State, state: State, inputs: InputsBase, observation: Observation):
+    def loglikelihood(self, proposed_state: State, state: State, inputs: InputsBase, observation: tf.Tensor):
         """Interface method for particle proposal
         :param proposed_state: State
             proposed state
