@@ -217,7 +217,7 @@ class ObservationSeries(DataSeries, metaclass=abc.ABCMeta):
             object.__setattr__(self, '_observation', ta)
 
     def write(self, t, observation):
-        observation = self._observation.write(t, tf.reshape(observation.observation, self.shape))
+        observation = self._observation.write(t, tf.reshape(observation, self.shape))
         return attr.evolve(self, observation=observation)
 
     def stack(self):

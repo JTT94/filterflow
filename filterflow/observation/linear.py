@@ -1,7 +1,7 @@
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from filterflow.base import State, Observation
+from filterflow.base import State
 from filterflow.observation.base import ObservationModelBase
 
 
@@ -12,14 +12,14 @@ class LinearObservationModel(ObservationModelBase):
         self._observation_matrix = observation_matrix
         self._error_rv = error_rv
 
-    def loglikelihood(self, state: State, observation: Observation):
+    def loglikelihood(self, state: State, observation: tf.Tensor):
         """Computes the loglikelihood of an observation given proposed particles
         :param state: State
             Proposed (predicted) state of the filter given State at t-1 and Observation
-        :param observation: Observation
+        :param observation: tf.Tensor
             User/Process given observation
         :return: a tensor of loglikelihoods for all particles
         :rtype: tf.Tensor
         """
-        error = observation.observation - tf.linalg.matvec(self._observation_matrix, state.particles)
+        error = observation - tf.linalg.matvec(self._observation_matrix, state.particles)
         return self._error_rv.log_prob(error)

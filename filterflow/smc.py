@@ -1,7 +1,7 @@
 import attr
 import tensorflow as tf
 
-from filterflow.base import State, Observation, InputsBase, Module, DTYPE_TO_STATE_SERIES
+from filterflow.base import State, Module, DTYPE_TO_STATE_SERIES
 from filterflow.observation.base import ObservationModelBase
 from filterflow.proposal.base import ProposalModelBase
 from filterflow.resampling.base import ResamplerBase
@@ -21,26 +21,26 @@ class SMC(Module):
         self._resampling_criterion = resampling_criterion
         self._resampling_method = resampling_method
 
-    def predict(self, state: State, inputs: InputsBase):
+    def predict(self, state: State, inputs: tf.Tensor):
         """Predict step of the filter
 
         :param state: State
             prior state of the filter
-        :param inputs: InputsBase
+        :param inputs: tf.Tensor
             Inputs used for preduction
         :return: Predicted State
         :rtype: State
         """
         return self._transition_model.sample(state, inputs)
 
-    def update(self, state: State, observation: Observation,
-               inputs: InputsBase):
+    def update(self, state: State, observation: tf.Tensor,
+               inputs: tf.Tensor):
         """
         :param state: State
             current state of the filter
-        :param observation: Observation
+        :param observation: tf.Tensor
             observation to compare the state against
-        :param inputs: InputsBase
+        :param inputs: tf.Tensor
             inputs for the observation_model
         :return: Updated weights
         """
@@ -53,14 +53,14 @@ class SMC(Module):
 
         return new_state
 
-    def propose_and_weight(self, state: State, observation: Observation,
-                           inputs: InputsBase):
+    def propose_and_weight(self, state: State, observation: tf.Tensor,
+                           inputs: tf.Tensor):
         """
         :param state: State
             current state of the filter
-        :param observation: Observation
+        :param observation: tf.Tensor
             observation to compare the state against
-        :param inputs: InputsBase
+        :param inputs: tf.Tensor
             inputs for the observation_model
         :return: Updated weights
         """
