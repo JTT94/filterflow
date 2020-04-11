@@ -1,16 +1,17 @@
-
 import attr
 import tensorflow as tf
-from filterflow.proposal.base import ProposalModelBase
+
 from filterflow.base import State, InputsBase
+from filterflow.proposal.base import ProposalModelBase
+
 
 class AuxiliaryProposal(ProposalModelBase):
     """Standard bootstrap proposal: directly uses the transition model as a proposal.
     """
 
-    def __init__(self, proposal_model, auxiliary_loglikelihood, name='AuxiliaryProposal'):
+    def __init__(self, transition_model, auxiliary_loglikelihood, name='AuxiliaryProposal'):
         super(AuxiliaryProposal, self).__init__(name=name)
-        self._proposal_model = proposal_model
+        self._transition_model = transition_model
         self._aux_ll = auxiliary_loglikelihood
 
     def propose(self, state: State, inputs: InputsBase, _observation: tf.Tensor):
@@ -31,4 +32,4 @@ class AuxiliaryProposal(ProposalModelBase):
         :return: proposed State
         :rtype: tf.Tensor
         """
-        return self._proposal_model.loglikelihood(state, proposed_state, inputs) + self._aux_ll(state, observation)
+        return self._transition_model.loglikelihood(state, proposed_state, inputs) + self._aux_ll(state, observation)

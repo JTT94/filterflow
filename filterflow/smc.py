@@ -100,11 +100,6 @@ class SMC(Module):
             return i < n_observations
 
         i0 = tf.constant(0)
-        # state_shape = State(**{name: getattr(initial_state, name).get_shape()
-        #                        for name in attr.fields_dict(State)})
-        # state_series_shape = StateSeriesKlass(batch_size = states_series.batch_size. **{name: tf.TensorShape([None] + getattr(state_shape, name))
-        #                               for name in attr.fields_dict(State)})
-        # shape_invariants = [state_shape, state_series_shape, i0.get_shape()]
         final_state, states_series, _ = tf.while_loop(cond, body, [initial_state, states_series, i0], )
         return final_state, states_series.stack()
 
