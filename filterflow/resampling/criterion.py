@@ -59,6 +59,7 @@ class NeffCriterion(ResamplingCriterionBase):
         else:
             return _neff(state.weights, self._assume_normalized, self._on_log, threshold)
 
+
 class AlwaysResample(ResamplingCriterionBase):
 
     def apply(self, state: State):

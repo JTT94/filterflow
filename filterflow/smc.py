@@ -78,39 +78,48 @@ class SMC(Module):
                            log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)
 
     @tf.function
-    def _return_all_loop(self, initial_state: State, observation_series: tf.data.Dataset):
-        # init state
-        state = attr.evolve(initial_state)
-
+    def _return(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor):
         # infer dtype
-        dtype = state.particles.dtype
+        dtype = initial_state.particles.dtype
 
         # init series
         StateSeriesKlass = DTYPE_TO_STATE_SERIES[dtype]
-        states = StateSeriesKlass(batch_size=state.batch_size,
-                                  n_particles=state.n_particles,
-                                  dimension=state.dimension)
+        states_series = StateSeriesKlass(batch_size=initial_state.batch_size,
+                                         n_particles=initial_state.n_particles,
+                                         dimension=initial_state.dimension)
 
-        # forward loop
-        for t, observation in observation_series.enumerate():
-            # TODO: Use the input data properly
+        data_iterator = iter(observation_series)
+
+        def body(state, states_series, i):
+            observation = data_iterator.get_next()
             state = self.update(state, observation, tf.constant(0.))
-            states = states.write(tf.cast(t, tf.dtypes.int32), state)
+            states_series = states_series.write(i, state)
+            return state, states_series, i + 1
 
-        return states.stack()
+        def cond(_state, _states_series, i):
+            return i < n_observations
+
+        i0 = tf.constant(0)
+        # state_shape = State(**{name: getattr(initial_state, name).get_shape()
+        #                        for name in attr.fields_dict(State)})
+        # state_series_shape = StateSeriesKlass(batch_size = states_series.batch_size. **{name: tf.TensorShape([None] + getattr(state_shape, name))
+        #                               for name in attr.fields_dict(State)})
+        # shape_invariants = [state_shape, state_series_shape, i0.get_shape()]
+        final_state, states_series, _ = tf.while_loop(cond, body, [initial_state, states_series, i0], )
+        return final_state, states_series.stack()
 
     @tf.function
-    def _return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset):
-        # init state
-        state = attr.evolve(initial_state)
-        # forward loop
-        for observation in observation_series:
-            # TODO: Use the input data properly
-            state = self.update(state, observation, tf.constant(0.))
+    def _return_all_loop(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor):
+        _, states_series = self._return(initial_state, observation_series, n_observations)
+        return states_series
 
-        return state
+    @tf.function
+    def _return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor):
+        final_state, _ = self._return(initial_state, observation_series, n_observations)
+        return final_state
 
-    def __call__(self, initial_state: State, observation_series: tf.data.Dataset, return_final=False):
+    def __call__(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor,
+                 return_final=False):
         """
         :param initial_state: State
             initial state of the filter
@@ -119,6 +128,6 @@ class SMC(Module):
         :return: tensor array of states
         """
         if return_final:
-            return self._return_final_loop(initial_state, observation_series)
+            return self._return_final_loop(initial_state, observation_series, n_observations)
         else:
-            return self._return_all_loop(initial_state, observation_series)
+            return self._return_all_loop(initial_state, observation_series, n_observations)

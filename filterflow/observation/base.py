@@ -20,7 +20,7 @@ class ObservationModelBase(Module, metaclass=abc.ABCMeta):
 
 class ObservationSampler(ObservationModelBase, metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def loglikelihood(self, state: State, observation: Observation):
+    def loglikelihood(self, state: State, observation: tf.Tensor):
         """Computes the loglikelihood of an observation given proposed particles
         :param state: State
             Proposed (predicted) state of the filter given State at t-1 and Observation
