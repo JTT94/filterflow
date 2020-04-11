@@ -85,10 +85,12 @@ class State:
     def dimension(self):
         return self.particles.shape[2]
 
+
 @attr.s
 class StateWithMemory(State):
     ADDITIONAL_STATE_VARIABLES = ('rnn_state',)
     rnn_state = attr.ib(validator=_dim_3_validator)
+
 
 @attr.s(frozen=True)
 class StateSeries(DataSeries, metaclass=abc.ABCMeta):
@@ -96,28 +98,12 @@ class StateSeries(DataSeries, metaclass=abc.ABCMeta):
     n_particles = attr.ib()
     dimension = attr.ib()
 
-    _particles = attr.ib(default=None)
-    _log_weights = attr.ib(default=None)
-    _weights = attr.ib(default=None)
-    _log_likelihoods = attr.ib(default=None)
+    particles = attr.ib(default=None)
+    log_weights = attr.ib(default=None)
+    weights = attr.ib(default=None)
+    log_likelihoods = attr.ib(default=None)
 
     DTYPE = None
-
-    @property
-    def particles(self):
-        return self._particles
-
-    @property
-    def log_weights(self):
-        return self._log_weights
-
-    @property
-    def weights(self):
-        return self._weights
-
-    @property
-    def log_likelihoods(self):
-        return self._log_likelihoods
 
     def _set_ta(self, attr, shape):
         ta = tf.TensorArray(self.DTYPE,
@@ -128,57 +114,57 @@ class StateSeries(DataSeries, metaclass=abc.ABCMeta):
     def __attrs_post_init__(self):
         # particles
         particles_shape = [self.batch_size, self.n_particles, self.dimension]
-        if self._particles is None:
-            self._set_ta('_particles', particles_shape)
+        if self.particles is None:
+            self._set_ta('particles', particles_shape)
 
         # weights
         weights_shape = [self.batch_size, self.n_particles]
-        if self._weights is None:
-            self._set_ta('_weights', weights_shape)
+        if self.weights is None:
+            self._set_ta('weights', weights_shape)
 
         # log_weights
         log_weights_shape = [self.batch_size, self.n_particles]
-        if self._log_weights is None:
-            self._set_ta('_log_weights', log_weights_shape)
+        if self.log_weights is None:
+            self._set_ta('log_weights', log_weights_shape)
 
         # log_likelihoods
         log_lik_shape = [self.batch_size]
-        if self._log_likelihoods is None:
-            self._set_ta('_log_likelihoods', log_lik_shape)
+        if self.log_likelihoods is None:
+            self._set_ta('log_likelihoods', log_lik_shape)
 
     def write(self, t, state):
-        particles = self._particles.write(t, state.particles)
-        log_weights = self._log_weights.write(t, state.log_weights)
-        weights = self._weights.write(t, state.weights)
-        log_likelihoods = self._log_likelihoods.write(t, state.log_likelihoods)
+        particles = self.particles.write(t, state.particles)
+        log_weights = self.log_weights.write(t, state.log_weights)
+        weights = self.weights.write(t, state.weights)
+        log_likelihoods = self.log_likelihoods.write(t, state.log_likelihoods)
         return attr.evolve(self, particles=particles, log_weights=log_weights, weights=weights,
                            log_likelihoods=log_likelihoods)
 
     def stack(self):
-        particles = self._particles.stack()
-        log_weights = self._log_weights.stack()
-        weights = self._weights.stack()
-        log_likelihoods = self._log_likelihoods.stack()
+        particles = self.particles.stack()
+        log_weights = self.log_weights.stack()
+        weights = self.weights.stack()
+        log_likelihoods = self.log_likelihoods.stack()
         return attr.evolve(self, particles=particles, log_weights=log_weights, weights=weights,
                            log_likelihoods=log_likelihoods)
 
     def size(self):
-        if isinstance(self._particles, tf.TensorArray):
-            return self._particles.size()
+        if isinstance(self.particles, tf.TensorArray):
+            return self.particles.size()
         else:
-            return self._particles.shape[0]
+            return self.particles.shape[0]
 
     def read(self, t):
-        if isinstance(self._particles, tf.TensorArray):
-            particles = self._particles.read(t)
-            log_weights = self._log_weights.read(t)
-            weights = self._weights.read(t)
-            log_likelihoods = self._log_likelihoods.read(t)
+        if isinstance(self.particles, tf.TensorArray):
+            particles = self.particles.read(t)
+            log_weights = self.log_weights.read(t)
+            weights = self.weights.read(t)
+            log_likelihoods = self.log_likelihoods.read(t)
         else:
-            particles = self._particles[t]
-            log_weights = self._log_weights[t]
-            weights = self._weights[t]
-            log_likelihoods = self._log_likelihoods[t]
+            particles = self.particles[t]
+            log_weights = self.log_weights[t]
+            weights = self.weights[t]
+            log_likelihoods = self.log_likelihoods[t]
 
         state = State(particles=particles,
                       log_weights=log_weights,
@@ -233,7 +219,7 @@ class ObservationSeries(DataSeries, metaclass=abc.ABCMeta):
             object.__setattr__(self, '_observation', ta)
 
     def write(self, t, observation):
-        observation = self._observation.write(t, tf.reshape(observation.observation, self.shape))
+        observation = self._observation.write(t, tf.reshape(observation, self.shape))
         return attr.evolve(self, observation=observation)
 
     def stack(self):

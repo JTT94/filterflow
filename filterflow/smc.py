@@ -1,7 +1,7 @@
 import attr
 import tensorflow as tf
 
-from filterflow.base import State, InputsBase, Module, DTYPE_TO_STATE_SERIES
+from filterflow.base import State, Module, DTYPE_TO_STATE_SERIES
 from filterflow.observation.base import ObservationModelBase
 from filterflow.proposal.base import ProposalModelBase
 from filterflow.resampling.base import ResamplerBase
@@ -21,12 +21,12 @@ class SMC(Module):
         self._resampling_criterion = resampling_criterion
         self._resampling_method = resampling_method
 
-    def predict(self, state: State, inputs: InputsBase):
+    def predict(self, state: State, inputs: tf.Tensor):
         """Predict step of the filter
 
         :param state: State
             prior state of the filter
-        :param inputs: InputsBase
+        :param inputs: tf.Tensor
             Inputs used for preduction
         :return: Predicted State
         :rtype: State
@@ -34,13 +34,13 @@ class SMC(Module):
         return self._transition_model.sample(state, inputs)
 
     def update(self, state: State, observation: tf.Tensor,
-               inputs: InputsBase):
+               inputs: tf.Tensor):
         """
         :param state: State
             current state of the filter
-        :param observation: Observation
+        :param observation: tf.Tensor
             observation to compare the state against
-        :param inputs: InputsBase
+        :param inputs: tf.Tensor
             inputs for the observation_model
         :return: Updated weights
         """
@@ -54,13 +54,13 @@ class SMC(Module):
         return new_state
 
     def propose_and_weight(self, state: State, observation: tf.Tensor,
-                           inputs: InputsBase):
+                           inputs: tf.Tensor):
         """
         :param state: State
             current state of the filter
-        :param observation: Observation
+        :param observation: tf.Tensor
             observation to compare the state against
-        :param inputs: InputsBase
+        :param inputs: tf.Tensor
             inputs for the observation_model
         :return: Updated weights
         """
@@ -77,8 +77,8 @@ class SMC(Module):
         return attr.evolve(proposed_state, weights=tf.math.exp(normalized_log_weights),
                            log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)
 
-    #@tf.function
-    def return_all_loop(self, initial_state: State, observation_series: tf.data.Dataset):
+    @tf.function
+    def _return_all_loop(self, initial_state: State, observation_series: tf.data.Dataset):
         # init state
         state = attr.evolve(initial_state)
 
@@ -92,29 +92,19 @@ class SMC(Module):
                                   dimension=state.dimension)
 
         # forward loop
-        for t, observation in enumerate(observation_series):
+        for t, observation in observation_series.enumerate():
             # TODO: Use the input data properly
             state = self.update(state, observation, tf.constant(0.))
-            states = states.write(t, state)
+            states = states.write(tf.cast(t, tf.dtypes.int32), state)
 
         return states.stack()
 
-    #@tf.function
-    def return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset):
+    @tf.function
+    def _return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset):
         # init state
         state = attr.evolve(initial_state)
         # forward loop
-        for t, observation in enumerate(observation_series):
-            # TODO: Use the input data properly
-            state = self.update(state, observation, tf.constant(0.))
-
-        return state
-
-    def no_dec_return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset):
-        # init state
-        state = attr.evolve(initial_state)
-        # forward loop
-        for t, observation in enumerate(observation_series):
+        for observation in observation_series:
             # TODO: Use the input data properly
             state = self.update(state, observation, tf.constant(0.))
 
@@ -129,6 +119,6 @@ class SMC(Module):
         :return: tensor array of states
         """
         if return_final:
-            return self.return_final_loop(initial_state, observation_series)
+            return self._return_final_loop(initial_state, observation_series)
         else:
-            return self.return_all_loop(initial_state, observation_series)
+            return self._return_all_loop(initial_state, observation_series)

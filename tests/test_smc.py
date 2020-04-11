@@ -1,10 +1,11 @@
-import attr
+import numpy as np
+import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from filterflow.base import State, FloatObservationSeries, Observation, StateSeries
+from filterflow.base import State, StateSeries
 from filterflow.observation.linear import LinearObservationModel
-from filterflow.proposal.base import BootstrapProposalModel
+from filterflow.proposal import BootstrapProposalModel
 from filterflow.resampling.criterion import NeffCriterion
 from filterflow.resampling.standard.systematic import SystematicResampler
 from filterflow.smc import SMC
@@ -45,19 +46,17 @@ class TestSMC(tf.test.TestCase):
                                     systematic_resampling_method)
 
         # TODO: Let's change this using an instance of StateSpaceModel
-        self.observation_series = FloatObservationSeries([1, 1, 1])
         n = 100
-        observation = Observation(tf.constant([[[0.]]]))
-        for i in range(n):
-            self.observation_series = self.observation_series.write(i, observation)
-            observation = attr.evolve(observation,
-                                      observation=observation.observation + tf.random.normal([1, 1, 1], 0., 1.))
-        self.observation_series = self.observation_series.stack()
+        observation = np.array([[[0.]]]).astype(np.float32)
+        observations = [observation]
+        for _ in range(n):
+            observations.append(observation)
+            observation = observation + np.random.normal(0., 1., [1, 1, 1])
+        self.observation_dataset = tf.data.Dataset.from_tensor_slices(observations)
 
     def test_call(self):
-        final_state = self.bootstrap_filter(self.initial_state, self.observation_series, True)
+        final_state = self.bootstrap_filter(self.initial_state, self.observation_dataset, True)
         self.assertIsInstance(final_state, State)
 
-        all_states = self.bootstrap_filter(self.initial_state, self.observation_series, False)
+        all_states = self.bootstrap_filter(self.initial_state, self.observation_dataset, False)
         self.assertIsInstance(all_states, StateSeries)
-
