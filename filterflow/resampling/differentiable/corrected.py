@@ -6,13 +6,15 @@ from filterflow.base import State
 from filterflow.resampling.base import ResamplerBase
 from filterflow.resampling.differentiable.biased import apply_transport_matrix
 from filterflow.resampling.differentiable.regularized_transport.plan import transport
+from filterflow.resampling.differentiable.ricatti.solver import RicattiSolver
 
 
 class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
     """Regularised Transform - docstring to come."""
 
     # TODO: Document this really nicely
-    def __init__(self, epsilon, scaling, max_iter, convergence_threshold, ricatti_solver, name='RegularisedTransform'):
+    def __init__(self, epsilon, scaling=0.75, max_iter=100, convergence_threshold=1e-3, ricatti_solver=None,
+                 name='RegularisedTransform'):
         """Constructor
 
         :param epsilon: float
@@ -29,7 +31,10 @@ class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
         self.max_iter = tf.cast(max_iter, tf.dtypes.int32)
         self.epsilon = tf.cast(epsilon, float)
         self.scaling = tf.cast(scaling, float)
-        self.ricatti_solver = ricatti_solver
+        if ricatti_solver is None:
+            self.ricatti_solver = RicattiSolver(tf.constant(0.25), tf.constant(10.), tf.constant(1e-3))
+        else:
+            self.ricatti_solver = ricatti_solver
         super(CorrectedRegularizedTransform, self).__init__(name=name)
 
     def apply(self, state: State, flags: tf.Tensor):
