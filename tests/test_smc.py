@@ -1,5 +1,4 @@
 import numpy as np
-import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
@@ -46,17 +45,17 @@ class TestSMC(tf.test.TestCase):
                                     systematic_resampling_method)
 
         # TODO: Let's change this using an instance of StateSpaceModel
-        n = 100
+        self.n = 100
         observation = np.array([[[0.]]]).astype(np.float32)
         observations = [observation]
-        for _ in range(n):
+        for _ in range(self.n):
             observations.append(observation)
             observation = observation + np.random.normal(0., 1., [1, 1, 1])
         self.observation_dataset = tf.data.Dataset.from_tensor_slices(observations)
 
     def test_call(self):
-        final_state = self.bootstrap_filter(self.initial_state, self.observation_dataset, True)
+        final_state = self.bootstrap_filter(self.initial_state, self.observation_dataset, tf.constant(self.n), True)
         self.assertIsInstance(final_state, State)
 
-        all_states = self.bootstrap_filter(self.initial_state, self.observation_dataset, False)
+        all_states = self.bootstrap_filter(self.initial_state, self.observation_dataset, tf.constant(self.n), False)
         self.assertIsInstance(all_states, StateSeries)

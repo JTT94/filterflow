@@ -36,6 +36,5 @@ class RandomWalkModel(TransitionModelBase):
         :rtype: State
         """
         pushed_particles = tf.linalg.matvec(self._transition_matrix, state.particles)
-
         res = pushed_particles + self._noise.sample([state.batch_size, state.n_particles])
         return res
