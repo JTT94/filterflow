@@ -5,8 +5,8 @@ from filterflow.resampling.differentiable.regularized_transport.utils import cos
 
 
 @tf.function
-def fillna(tensor, value):
-    return tf.where(tf.math.is_nan(tensor), value, tensor)
+def _fillna(tensor):
+    return tf.where(tf.math.is_finite(tensor), tensor, tf.zeros_like(tensor))
 
 
 @tf.function
@@ -26,13 +26,20 @@ def transport_from_potentials(x, f, g, eps, logw, n):
     :rtype: tf.Tensor[B, N, N]
 
     """
-
+    float_n = tf.cast(n, float)
+    log_n = tf.math.log(float_n)
     cost_matrix = cost(x, x)
-    fg = (tf.expand_dims(f, 2) + tf.expand_dims(g, 1))  # fg = f + g.T
-    temp = (fg - cost_matrix) / eps
-    temp = temp - tf.reduce_logsumexp(temp, 1, keepdims=True) + tf.math.log(n)
+    fg = tf.expand_dims(f, 2) + tf.expand_dims(g, 1)  # fg = f + g.T
+    temp = fg - cost_matrix
+    temp = temp / eps
+
+    temp = temp - tf.reduce_logsumexp(temp, 1, keepdims=True) + log_n
     # We "divide the transport matrix by its col-wise sum to make sure that weights normalise to logw.
-    transport_matrix = tf.math.exp(temp + tf.expand_dims(logw, 1))
+    temp = temp + tf.expand_dims(logw, 1)
+
+    transport_matrix = tf.math.exp(temp)
+
+
     return transport_matrix
 
 
@@ -54,6 +61,7 @@ def transport(x, logw, eps, scaling, threshold, max_iter, n):
     :rtype tf.Tensor[B, N, N]
     """
     float_n = tf.cast(n, float)
+
     uniform_log_weight = -tf.math.log(float_n) * tf.ones_like(logw)
 
     alpha, beta, _, _, total_iterations = sinkhorn_potentials(logw, x, uniform_log_weight, x, eps, scaling, threshold,

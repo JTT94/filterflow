@@ -23,8 +23,11 @@ class TestFunctions(tf.test.TestCase):
 
     def test_make_admissible(self):
         admissible = _make_admissible(self.tensor)
-        self._assert_nil(admissible)
         self.assertAllClose(admissible, tf.transpose(admissible, perm=[0, 2, 1]), atol=1e-5)
+        row_sum = tf.reduce_sum(admissible, 1)
+        col_sum = tf.reduce_sum(admissible, 2)
+        self.assertAllClose(row_sum, tf.zeros_like(row_sum), atol=1e-6)
+        self.assertAllClose(col_sum, tf.zeros_like(col_sum), atol=1e-6)
 
 
 class TestRicatti(tf.test.TestCase):
@@ -32,7 +35,7 @@ class TestRicatti(tf.test.TestCase):
         np.random.seed(42)
         self.horizon = tf.constant(5.)
         self.batch_size = 1
-        self.n_particles = 5
+        self.n_particles = 25
         self.dimension = 2
 
         choice = np.random.binomial(1, 0.25, [self.batch_size, self.n_particles]).astype(bool)
@@ -94,9 +97,9 @@ class TestRicatti(tf.test.TestCase):
 
     def test_gradient(self):
         @tf.function
-        def fun(w):
+        def fun_w(w):
             w_ = w / tf.reduce_sum(w, 1)
             return tf.math.reduce_std(self.ricatti_instance(self.transport_matrix, w_))
 
-        theoretical, numerical = tf.test.compute_gradient(fun, [tf.constant(self.w)])
-        self.assertAllClose(theoretical[0], numerical[0], 1e-2)
+        theoretical, numerical = tf.test.compute_gradient(fun_w, [tf.constant(self.w)])
+        self.assertAllClose(theoretical[0], numerical[0], 1e-5)

@@ -8,8 +8,8 @@ from filterflow.resampling.differentiable.regularized_transport.plan import tran
 class TestSinkhorn(tf.test.TestCase):
     def setUp(self):
         np.random.seed(42)
-        n_particles = 5
-        batch_size = 1
+        n_particles = 100
+        batch_size = 3
         dimension = 2
 
         self.n_particles = tf.constant(n_particles)
@@ -19,7 +19,7 @@ class TestSinkhorn(tf.test.TestCase):
         self.np_epsilon = 0.25
         self.epsilon = tf.constant(self.np_epsilon)
 
-        self.threshold = tf.constant(1e-2)
+        self.threshold = tf.constant(1e-6)
         self.n_iter = tf.constant(1000)
 
         self.np_x = np.random.uniform(-1., 1., [batch_size, n_particles, dimension]).astype(np.float32)
@@ -36,10 +36,7 @@ class TestSinkhorn(tf.test.TestCase):
     def test_transport(self):
         T_scaled, total_iter_scaled = transport(self.x, self.degenerate_logw, self.epsilon, 0.95, self.threshold,
                                                 self.n_iter, self.n_particles)
-        T_simple, total_iter_simple = transport(self.x, self.degenerate_logw, self.epsilon, 1., self.threshold,
-                                                self.n_iter, self.n_particles)
 
-        self.assertGreater(total_iter_simple, total_iter_scaled)
         self.assertAllClose(tf.constant(self.degenerate_weights) * tf.cast(self.n_particles, float),
                             tf.reduce_sum(T_scaled, 1))
 

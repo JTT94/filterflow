@@ -1,6 +1,11 @@
 import tensorflow as tf
 
 
+def _fillna(tensor):
+    mask = tf.math.is_finite(tensor)
+    return tf.where(mask, tensor, tf.zeros_like(tensor))
+
+
 @tf.function
 def diameter(x, y):
     min_x = tf.math.reduce_min(x, [1, 2])
@@ -27,7 +32,9 @@ def softmin(epsilon: tf.Tensor, cost_matrix: tf.Tensor, f: tf.Tensor) -> tf.Tens
     f_ = tf.reshape(f, (b, 1, n))
     temp_val = f_ - cost_matrix / tf.reshape(epsilon, (-1, 1, 1))
     log_sum_exp = tf.reduce_logsumexp(temp_val, axis=2)
-    return -tf.reshape(epsilon, (-1, 1)) * log_sum_exp
+    res = -tf.reshape(epsilon, (-1, 1)) * log_sum_exp
+
+    return res
 
 
 @tf.function

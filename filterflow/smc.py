@@ -9,6 +9,8 @@ from filterflow.resampling.criterion import ResamplingCriterionBase
 from filterflow.transition.base import TransitionModelBase
 from filterflow.utils import normalize
 
+MIN_LOG_WEIGHT = tf.constant(-3.)
+
 
 class SMC(Module):
     def __init__(self, observation_model: ObservationModelBase, transition_model: TransitionModelBase,
@@ -64,16 +66,17 @@ class SMC(Module):
             inputs for the observation_model
         :return: Updated weights
         """
-
+        float_n_particles = tf.cast(state.n_particles, float)
         proposed_state = self._proposal_model.propose(state, inputs, observation)
         log_weights = self._transition_model.loglikelihood(state, proposed_state, inputs)
         log_weights = log_weights + self._observation_model.loglikelihood(proposed_state, observation)
         log_weights = log_weights - self._proposal_model.loglikelihood(proposed_state, state, inputs, observation)
         log_weights = log_weights + state.log_weights
-
         log_likelihood_increment = tf.math.reduce_logsumexp(log_weights, 1)
         log_likelihoods = state.log_likelihoods + log_likelihood_increment
         normalized_log_weights = normalize(log_weights, 1, True)
+        normalized_log_weights = tf.clip_by_value(normalized_log_weights, MIN_LOG_WEIGHT * float_n_particles,
+                                                  tf.constant(float('inf')))
         return attr.evolve(proposed_state, weights=tf.math.exp(normalized_log_weights),
                            log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)
 
@@ -90,17 +93,17 @@ class SMC(Module):
 
         data_iterator = iter(observation_series)
 
-        def body(state, states_series, i):
+        def body(state, states, i):
             observation = data_iterator.get_next()
             state = self.update(state, observation, tf.constant(0.))
-            states_series = states_series.write(i, state)
-            return state, states_series, i + 1
+            states = states.write(i, state)
+            return state, states, i + 1
 
-        def cond(_state, _states_series, i):
+        def cond(_state, _states, i):
             return i < n_observations
 
         i0 = tf.constant(0)
-        final_state, states_series, _ = tf.while_loop(cond, body, [initial_state, states_series, i0], )
+        final_state, states, _ = tf.while_loop(cond, body, [initial_state, states_series, i0], )
         return final_state, states_series.stack()
 
     @tf.function
@@ -110,9 +113,10 @@ class SMC(Module):
 
     @tf.function
     def _return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor):
-        final_state, _ = self._return(initial_state, observation_series, n_observations)
+        final_state, states_series = self._return(initial_state, observation_series, n_observations)
         return final_state
 
+    @tf.function
     def __call__(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor,
                  return_final=False):
         """

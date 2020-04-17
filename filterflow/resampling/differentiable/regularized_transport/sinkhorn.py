@@ -5,7 +5,6 @@ from filterflow.resampling.differentiable.regularized_transport.utils import cos
 
 # This is very much adapted from Feydy's geomloss work. Hopefully these should merge into one library...
 
-
 @tf.function
 def _simple_sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, epsilon, threshold, max_iter):
     epsilon = tf.ones([log_alpha.shape[0], 1]) * epsilon
@@ -28,7 +27,7 @@ def _simple_sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, epsilon, thresh
     def stop_condition(i, _u, _v, update_size):
         n_iter_cond = i < max_iter - 1
         stable_cond = update_size > threshold
-        return tf.reduce_all([n_iter_cond, stable_cond])
+        return tf.logical_and(n_iter_cond, tf.reduce_all(stable_cond))
 
     def body(i, u, v, _update_size):
         new_u, new_v, new_update_size = apply_one(u, v)
@@ -64,7 +63,7 @@ def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsil
 
     def stop_condition(i, _a_y, _b_x, _a_x, _b_y, continue_, running_epsilon):
         n_iter_cond = i < max_iter - 1
-        return tf.logical_and(n_iter_cond, continue_)
+        return tf.logical_and(n_iter_cond, tf.reduce_all(continue_))
 
     def apply_one(a_y, b_x, a_x, b_y, continue_, running_epsilon):
         running_epsilon_ = tf.reshape(running_epsilon, [-1, 1])
