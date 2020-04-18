@@ -9,7 +9,7 @@ from filterflow.resampling.criterion import ResamplingCriterionBase
 from filterflow.transition.base import TransitionModelBase
 from filterflow.utils import normalize
 
-MIN_LOG_WEIGHT = tf.constant(-3.)
+MIN_RELATIVE_LOG_WEIGHT = tf.constant(-2.)
 
 
 class SMC(Module):
@@ -75,7 +75,8 @@ class SMC(Module):
         log_likelihood_increment = tf.math.reduce_logsumexp(log_weights, 1)
         log_likelihoods = state.log_likelihoods + log_likelihood_increment
         normalized_log_weights = normalize(log_weights, 1, True)
-        normalized_log_weights = tf.clip_by_value(normalized_log_weights, MIN_LOG_WEIGHT * float_n_particles,
+        normalized_log_weights = tf.clip_by_value(normalized_log_weights,
+                                                  MIN_RELATIVE_LOG_WEIGHT * float_n_particles,
                                                   tf.constant(float('inf')))
         return attr.evolve(proposed_state, weights=tf.math.exp(normalized_log_weights),
                            log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)

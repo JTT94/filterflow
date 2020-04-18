@@ -127,7 +127,7 @@ class RicattiSolver(tf.Module):
 
         @tf.function
         def grad(d_delta):
-            d_delta = _make_admissible(d_delta)
+            d_delta = tf.clip_by_value(d_delta, -1., 1.)
             grads = tf.gradients(res, [A, transport_matrix], d_delta)
             return grads
 

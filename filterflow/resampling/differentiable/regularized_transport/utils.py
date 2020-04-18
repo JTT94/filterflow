@@ -16,7 +16,6 @@ def diameter(x, y):
     return tf.maximum(max_x, max_y) - tf.minimum(min_x, min_y)
 
 
-@tf.function
 def softmin(epsilon: tf.Tensor, cost_matrix: tf.Tensor, f: tf.Tensor) -> tf.Tensor:
     """Implementation of softmin function
 

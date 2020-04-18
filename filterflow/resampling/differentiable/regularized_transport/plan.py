@@ -9,7 +9,7 @@ def _fillna(tensor):
     return tf.where(tf.math.is_finite(tensor), tensor, tf.zeros_like(tensor))
 
 
-@tf.function
+@tf.custom_gradient
 def transport_from_potentials(x, f, g, eps, logw, n):
     """
     To get the transported particles from the sinkhorn iterates
@@ -28,19 +28,26 @@ def transport_from_potentials(x, f, g, eps, logw, n):
     """
     float_n = tf.cast(n, float)
     log_n = tf.math.log(float_n)
-    cost_matrix = cost(x, x)
-    fg = tf.expand_dims(f, 2) + tf.expand_dims(g, 1)  # fg = f + g.T
-    temp = fg - cost_matrix
-    temp = temp / eps
+    with tf.GradientTape() as tape:
+        tape.watch([x, f, g, logw])
+        cost_matrix = cost(x, x)
+        fg = tf.expand_dims(f, 2) + tf.expand_dims(g, 1)  # fg = f + g.T
+        temp = fg - cost_matrix
+        temp = temp / eps
 
-    temp = temp - tf.reduce_logsumexp(temp, 1, keepdims=True) + log_n
-    # We "divide the transport matrix by its col-wise sum to make sure that weights normalise to logw.
-    temp = temp + tf.expand_dims(logw, 1)
+        temp = temp - tf.reduce_logsumexp(temp, 1, keepdims=True) + log_n
+        # We "divide the transport matrix by its col-wise sum to make sure that weights normalise to logw.
+        temp = temp + tf.expand_dims(logw, 1)
 
-    transport_matrix = tf.math.exp(temp)
+        transport_matrix = tf.math.exp(temp)
 
+    @tf.function
+    def grad(d_matrix):
+        clipped_d_matrix = tf.clip_by_value(d_matrix, -1., 1.)
+        dx, df, dg, dlogw = tape.gradient(transport_matrix, [x, f, g, logw], clipped_d_matrix)
+        return dx, df, dg, None, dlogw, None
 
-    return transport_matrix
+    return transport_matrix, grad
 
 
 @tf.function
