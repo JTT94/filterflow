@@ -61,7 +61,7 @@ def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsil
     a_x_init = softmin(epsilon_0, cost_xx, log_alpha)
     b_y_init = softmin(epsilon_0, cost_yy, log_beta)
 
-    def stop_condition(i, _a_y, _b_x, _a_x, _b_y, continue_, running_epsilon):
+    def stop_condition(i, _a_y, _b_x, _a_x, _b_y, continue_, _running_epsilon):
         n_iter_cond = i < max_iter - 1
         return tf.logical_and(n_iter_cond, tf.reduce_all(continue_))
 

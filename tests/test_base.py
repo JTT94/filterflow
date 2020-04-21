@@ -3,7 +3,7 @@ from contextlib import contextmanager
 import numpy as np
 import tensorflow as tf
 
-from filterflow.base import Observation, State, FloatStateSeries, StateSeries, FloatObservationSeries, ObservationSeries
+from filterflow.base import Observation, State, FloatStateSeries, StateSeries
 
 
 class TestBaseClasses(tf.test.TestCase):
@@ -31,15 +31,9 @@ class TestBaseClasses(tf.test.TestCase):
                 _ = self._test_function(j)
 
     def test_observation(self):
-        with self.assertRaises(ValueError):
-            _ = Observation(0., 1)
-
-        with self.assertRaises(ValueError):
-            _ = Observation([0.], 1)
-
         with self.assertNoLogs():
             for i in range(20):
-                observation = Observation(np.array([i]), 1)
+                observation = Observation(np.array([i]))
                 _ = self._test_function(observation)
 
     def test_state(self):
@@ -78,17 +72,3 @@ class TestBaseClasses(tf.test.TestCase):
         self.assertIsInstance(res, StateSeries)
         self.assertIsInstance(res.read(5), State)
 
-    def test_observation_series(self):
-        @tf.function
-        def fun(obs):
-
-            observation_series = FloatObservationSeries([1, 1, 1])
-            for i in tf.range(10):
-                observation_series = observation_series.write(i, obs)
-            return observation_series.stack()
-
-        obs = Observation(np.zeros([1, 1, 1], dtype=np.float32))
-
-        res = fun(obs)
-        self.assertIsInstance(res, ObservationSeries)
-        self.assertIsInstance(res.read(5), Observation)

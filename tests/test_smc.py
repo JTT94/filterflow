@@ -24,13 +24,13 @@ class TestSMC(tf.test.TestCase):
         self.initial_state = State(particles=initial_particles, log_weights=tf.math.log(weights), weights=weights,
                                    log_likelihoods=log_likelihoods)
 
-        error_variance = tf.constant([[0.5]], dtype=tf.float32)
+        error_variance = tf.constant([0.5], dtype=tf.float32)
         error_rv = tfp.distributions.MultivariateNormalDiag(tf.constant([0.]),
                                                             error_variance)
 
-        noise_variance = tf.constant([[0.5]])
-        noise_rv = tfp.distributions.MultivariateNormalFullCovariance(tf.constant([0.]),
-                                                                      noise_variance)
+        noise_variance = tf.constant([0.5])
+        noise_rv = tfp.distributions.MultivariateNormalDiag(tf.constant([0.]),
+                                                            noise_variance)
 
         observation_model = LinearObservationModel(tf.constant([[1.]]), error_rv)
 
@@ -47,7 +47,7 @@ class TestSMC(tf.test.TestCase):
         # TODO: Let's change this using an instance of StateSpaceModel
         self.n = 100
         observation = np.array([[[0.]]]).astype(np.float32)
-        observations = [observation]
+        observations = []
         for _ in range(self.n):
             observations.append(observation)
             observation = observation + np.random.normal(0., 1., [1, 1, 1])
