@@ -6,7 +6,7 @@ from filterflow.base import State
 from filterflow.resampling.base import ResamplerBase
 from filterflow.resampling.differentiable.biased import apply_transport_matrix
 from filterflow.resampling.differentiable.regularized_transport.plan import transport
-from filterflow.resampling.differentiable.ricatti.solver import RicattiSolver
+from filterflow.resampling.differentiable.ricatti.solver import PetkovSolver
 
 
 class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
@@ -34,7 +34,7 @@ class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
         self.scaling = tf.cast(scaling, float)
         self.propagate_correction_gradient = tf.cast(propagate_correction_gradient, bool)
         if ricatti_solver is None:
-            self.ricatti_solver = RicattiSolver(tf.constant(0.25), tf.constant(10.), tf.constant(1e-3))
+            self.ricatti_solver = PetkovSolver(tf.constant(10))
         else:
             self.ricatti_solver = ricatti_solver
         super(CorrectedRegularizedTransform, self).__init__(name=name)
@@ -52,8 +52,9 @@ class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
         # TODO: The real batch_size is the sum of flags. We shouldn't do more operations than we need...
         transport_matrix, _ = transport(state.particles, state.log_weights, self.epsilon, self.scaling,
                                         self.convergence_threshold, self.max_iter, state.n_particles)
-        transport_correction = self.ricatti_solver(transport_matrix, state.weights)
+        weights = state.weights
+        transport_correction = self.ricatti_solver(transport_matrix, weights)
         if not self.propagate_correction_gradient:
             transport_correction = tf.stop_gradient(transport_correction)
-
-        return apply_transport_matrix(state, transport_matrix + transport_correction, flags)
+        res = apply_transport_matrix(state, transport_matrix + transport_correction, flags)
+        return res

@@ -43,8 +43,8 @@ def transport_from_potentials(x, f, g, eps, logw, n):
 
     @tf.function
     def grad(d_matrix):
-        clipped_d_matrix = tf.clip_by_value(d_matrix, -1., 1.)
-        dx, df, dg, dlogw = tape.gradient(transport_matrix, [x, f, g, logw], clipped_d_matrix)
+        d_matrix = tf.clip_by_value(d_matrix, -1., 1.)
+        dx, df, dg, dlogw = tape.gradient(transport_matrix, [x, f, g, logw], d_matrix)
         return dx, df, dg, None, dlogw, None
 
     return transport_matrix, grad

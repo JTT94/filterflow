@@ -3,13 +3,14 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 
 from filterflow.resampling.differentiable.regularized_transport.plan import transport
-from filterflow.resampling.differentiable.ricatti.solver import _make_admissible, _make_nil, RicattiSolver, make_ode_fun
+from filterflow.resampling.differentiable.ricatti.solver import _make_admissible, _make_nil, NaiveSolver, PetkovSolver, \
+    make_ode_fun, _make_A, matrix_sign
 
 
 class TestFunctions(tf.test.TestCase):
     def setUp(self):
         self.batch_size = 5
-        self.n_particles = 50
+        self.n_particles = 30
         self.tensor = tf.random.uniform([self.batch_size, self.n_particles, self.n_particles], -1., 1.)
 
     def _assert_nil(self, tensor):
@@ -29,13 +30,31 @@ class TestFunctions(tf.test.TestCase):
         self.assertAllClose(row_sum, tf.zeros_like(row_sum), atol=1e-6)
         self.assertAllClose(col_sum, tf.zeros_like(col_sum), atol=1e-6)
 
+    def test_matrix_sign(self):
+        @tf.function
+        def fun(tensor):
+            return matrix_sign(tensor, tf.constant(10))
+
+        theoretical, numerical = tf.test.compute_gradient(fun, [self.tensor], delta=1e-6)
+        print(theoretical)
+        self.assertAllClose(theoretical[0], numerical[0], 1e-5)
+
+
+def _measure_time(fun, *args):
+    import time
+    res = fun(*args)
+    tic = time.time()
+    for _ in range(10):
+        _ = fun(*args)
+    return time.time() - tic, res
+
 
 class TestRicatti(tf.test.TestCase):
     def setUp(self):
         np.random.seed(42)
-        self.horizon = tf.constant(5.)
+        self.horizon = tf.constant(100.)
         self.batch_size = 1
-        self.n_particles = 25
+        self.n_particles = 20
         self.dimension = 2
 
         choice = np.random.binomial(1, 0.25, [self.batch_size, self.n_particles]).astype(bool)
@@ -52,10 +71,12 @@ class TestRicatti(tf.test.TestCase):
                                              tf.constant(1e-3),
                                              tf.constant(500), tf.constant(self.n_particles))
 
-        self.ricatti_instance = RicattiSolver(horizon=self.horizon)
+        self.naive_instance = NaiveSolver(horizon=self.horizon, threshold=tf.constant(1e-3),
+                                          step_size=tf.constant(0.05))
+        self.petkov_instance = PetkovSolver(tf.constant(100), use_newton_schulze=False)
 
     def test_make_A(self):
-        A = self.ricatti_instance._make_A(self.transport_matrix, self.w, float(self.n_particles))
+        A = _make_A(self.transport_matrix, self.w, float(self.n_particles))
 
         self.assertAllClose(tf.reduce_sum(A, 1), tf.zeros([self.batch_size, self.n_particles]), atol=1e-2)
         self.assertAllClose(tf.reduce_sum(A, 2), tf.zeros([self.batch_size, self.n_particles]), atol=1e-2)
@@ -63,9 +84,8 @@ class TestRicatti(tf.test.TestCase):
         self.assertAllClose(A, tf.transpose(A, perm=[0, 1, 2]))
 
     def test_ode_fn(self):
-        A = self.ricatti_instance._make_A(self.transport_matrix, self.w, float(self.n_particles))
-        B = self.ricatti_instance._make_B(self.transport_matrix)
-        ode_fn = make_ode_fun(A, B)
+        A = _make_A(self.transport_matrix, self.w, float(self.n_particles))
+        ode_fn = make_ode_fun(A, self.transport_matrix)
         delta_0 = tf.zeros_like(A)
         delta_prime = ode_fn(0., delta_0)
         delta = delta_0 + delta_prime
@@ -75,10 +95,9 @@ class TestRicatti(tf.test.TestCase):
         self.assertAllClose(delta, tf.transpose(delta, perm=[0, 1, 2]))
 
     def test_routine(self):
-        B = self.ricatti_instance._make_B(self.transport_matrix)
-        A = self.ricatti_instance._make_A(B, self.w, float(self.n_particles))
+        A = self.naive_instance._make_A(self.transport_matrix, self.w, float(self.n_particles))
 
-        solution = self.ricatti_instance._routine(A, B)
+        solution = self.naive_instance._routine(A, self.transport_matrix)
 
         x_tilde = tf.einsum('ijk,ikl->ijl', self.transport_matrix + solution, self.x)
         uncorrected_x_tilde = tf.einsum('ijk,ikl->ijl', self.transport_matrix, self.x)
@@ -99,7 +118,46 @@ class TestRicatti(tf.test.TestCase):
         @tf.function
         def fun_w(w):
             w_ = w / tf.reduce_sum(w, 1)
-            return tf.math.reduce_std(self.ricatti_instance(self.transport_matrix, w_))
+            return tf.math.reduce_std(self.naive_instance(self.transport_matrix, w_))
 
         theoretical, numerical = tf.test.compute_gradient(fun_w, [tf.constant(self.w)])
         self.assertAllClose(theoretical[0], numerical[0], 1e-5)
+
+    def test_solvers_agree(self):
+        naive_toc, naive_result = _measure_time(self.naive_instance, self.transport_matrix, self.w)
+        sign_toc, sign_result = _measure_time(self.petkov_instance, self.transport_matrix, self.w)
+
+        A = _make_A(self.transport_matrix, self.w, float(self.n_particles))
+
+        import scipy.linalg as linalg
+        eye = np.eye(self.n_particles)
+        sc_toc, sc_sol = _measure_time(linalg.solve_continuous_are, -self.transport_matrix[0].numpy(), eye,
+                                       A[0].numpy(), eye)
+
+        print()
+        print('sc_toc', sc_toc)
+        print('naive_toc', naive_toc)
+        print('sign_toc', sign_toc)
+
+        self.assertAllClose(naive_result[0], sc_sol, atol=1e-1)
+        # self.assertAllClose(naive_result, sign_result)
+        self.assertAllClose(sign_result[0], sc_sol, atol=1e-3)
+
+        # ode_fn = make_ode_fun(A, self.transport_matrix)
+        #
+        # delta_prime_sc_sol = ode_fn(0., tf.expand_dims(tf.constant(sc_sol.astype(np.float32)), 0))
+        # delta_prime_schur = ode_fn(0., schur_result)
+        # delta_prime_naive = ode_fn(0., naive_result)
+        # print(delta_prime_sc_sol)
+        # print(delta_prime_schur)
+        # print(delta_prime_naive)
+        #
+        # print()
+        # print(tf.reduce_sum(schur_result[0], 0))
+        # print(tf.reduce_sum(schur_result[0], 1))
+        # print(schur_result[0])
+        # print()
+        # print(tf.reduce_sum(naive_result[0], 0))
+        # print(tf.reduce_sum(naive_result[0], 1))
+        #
+        # print(naive_result[0])
