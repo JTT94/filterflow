@@ -62,7 +62,7 @@ class RegularisedTransform(ResamplerBase, metaclass=abc.ABCMeta):
         :rtype: State
         """
         # TODO: The real batch_size is the sum of flags. We shouldn't do more operations than we need...
-        transport_matrix, _ = transport(state.particles, state.log_weights, self.epsilon, self.scaling,
+        transport_matrix = transport(state.particles, state.log_weights, self.epsilon, self.scaling,
                                         self.convergence_threshold, self.max_iter, state.n_particles)
 
         return apply_transport_matrix(state, transport_matrix, flags)

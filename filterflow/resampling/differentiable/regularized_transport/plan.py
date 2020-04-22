@@ -9,7 +9,8 @@ def _fillna(tensor):
     return tf.where(tf.math.is_finite(tensor), tensor, tf.zeros_like(tensor))
 
 
-@tf.custom_gradient
+@tf.function
+# @tf.custom_gradient
 def transport_from_potentials(x, f, g, eps, logw, n):
     """
     To get the transported particles from the sinkhorn iterates
@@ -28,29 +29,30 @@ def transport_from_potentials(x, f, g, eps, logw, n):
     """
     float_n = tf.cast(n, float)
     log_n = tf.math.log(float_n)
-    with tf.GradientTape() as tape:
-        tape.watch([x, f, g, logw])
-        cost_matrix = cost(x, x)
-        fg = tf.expand_dims(f, 2) + tf.expand_dims(g, 1)  # fg = f + g.T
-        temp = fg - cost_matrix
-        temp = temp / eps
+    # with tf.GradientTape() as tape:
+    # tape.watch([x, f, g, logw])
+    cost_matrix = cost(x, x)
+    fg = tf.expand_dims(f, 2) + tf.expand_dims(g, 1)  # fg = f + g.T
+    temp = fg - cost_matrix
+    temp = temp / eps
 
-        temp = temp - tf.reduce_logsumexp(temp, 1, keepdims=True) + log_n
-        # We "divide the transport matrix by its col-wise sum to make sure that weights normalise to logw.
-        temp = temp + tf.expand_dims(logw, 1)
+    temp = temp - tf.reduce_logsumexp(temp, 1, keepdims=True) + log_n
+    # We "divide the transport matrix by its col-wise sum to make sure that weights normalise to logw.
+    temp = temp + tf.expand_dims(logw, 1)
 
-        transport_matrix = tf.math.exp(temp)
+    transport_matrix = tf.math.exp(temp)
 
-    @tf.function
-    def grad(d_matrix):
-        d_matrix = tf.clip_by_value(d_matrix, -1., 1.)
-        dx, df, dg, dlogw = tape.gradient(transport_matrix, [x, f, g, logw], d_matrix)
-        return dx, df, dg, None, dlogw, None
+    # @tf.function
+    # def grad(d_matrix):
+    #     d_matrix = tf.clip_by_value(d_matrix, -1., 1.)
+    #     dx, df, dg, dlogw = tape.gradient(transport_matrix, [x, f, g, logw], d_matrix)
+    #     return dx, df, dg, None, dlogw, None
 
-    return transport_matrix, grad
+    return transport_matrix  # , grad
 
 
 @tf.function
+@tf.custom_gradient
 def transport(x, logw, eps, scaling, threshold, max_iter, n):
     """
     Combine solve_for_state and transport_from_potentials in a "reweighting scheme"
@@ -71,7 +73,16 @@ def transport(x, logw, eps, scaling, threshold, max_iter, n):
 
     uniform_log_weight = -tf.math.log(float_n) * tf.ones_like(logw)
 
-    alpha, beta, _, _, total_iterations = sinkhorn_potentials(logw, x, uniform_log_weight, x, eps, scaling, threshold,
+    alpha, beta, _, _, _ = sinkhorn_potentials(logw, x, uniform_log_weight, x, eps, scaling, threshold,
                                                               max_iter)
     transport_matrix = transport_from_potentials(x, alpha, beta, eps, logw, float_n)
-    return transport_matrix, total_iterations
+
+    def grad(d_transport):
+        d_transport = tf.clip_by_value(d_transport, -1., 1.)
+        mask = logw > -3. * tf.math.log(float_n)  # the particle has died out really.
+        dx, dlogw = tf.gradients(transport_matrix, [x, logw], d_transport)
+        dlogw = tf.where(mask, dlogw, 0.)
+        dx = tf.where(tf.expand_dims(mask, -1), dx, 0.)  # set all dimensions of the same particle to 0.
+        return dx, dlogw, None, None, None, None, None
+
+    return transport_matrix, grad

@@ -1,43 +1,44 @@
 import numpy as np
+import scipy.linalg as linalg
 import tensorflow as tf
 import tensorflow_probability as tfp
 
+tf.config.set_visible_devices([], 'GPU')
+
 from filterflow.resampling.differentiable.regularized_transport.plan import transport
-from filterflow.resampling.differentiable.ricatti.solver import _make_admissible, _make_nil, NaiveSolver, PetkovSolver, \
+from filterflow.resampling.differentiable.ricatti.solver import _make_admissible, NaiveSolver, PetkovSolver, \
     make_ode_fun, _make_A, matrix_sign
+
 
 
 class TestFunctions(tf.test.TestCase):
     def setUp(self):
         self.batch_size = 5
-        self.n_particles = 30
-        self.tensor = tf.random.uniform([self.batch_size, self.n_particles, self.n_particles], -1., 1.)
+        self.n_particles = 5
+        self.tensor = tf.random.uniform([self.batch_size, self.n_particles, self.n_particles], -4., 1.)
 
     def _assert_nil(self, tensor):
         self.assertAllEqual(tensor.shape, [self.batch_size, self.n_particles, self.n_particles])
         self.assertAllClose(tf.reduce_sum(tensor, 1), tf.zeros([self.batch_size, self.n_particles]), atol=1e-5)
         self.assertAllClose(tf.reduce_sum(tensor, 2), tf.zeros([self.batch_size, self.n_particles]), atol=1e-5)
 
-    def test_make_nil(self):
-        nil = _make_nil(self.tensor)
-        self._assert_nil(nil)
-
     def test_make_admissible(self):
         admissible = _make_admissible(self.tensor)
         self.assertAllClose(admissible, tf.transpose(admissible, perm=[0, 2, 1]), atol=1e-5)
         row_sum = tf.reduce_sum(admissible, 1)
         col_sum = tf.reduce_sum(admissible, 2)
-        self.assertAllClose(row_sum, tf.zeros_like(row_sum), atol=1e-6)
-        self.assertAllClose(col_sum, tf.zeros_like(col_sum), atol=1e-6)
+        self.assertAllClose(row_sum, tf.zeros_like(row_sum), atol=1e-5)
+        self.assertAllClose(col_sum, tf.zeros_like(col_sum), atol=1e-5)
 
     def test_matrix_sign(self):
         @tf.function
         def fun(tensor):
-            return matrix_sign(tensor, tf.constant(10))
-
-        theoretical, numerical = tf.test.compute_gradient(fun, [self.tensor], delta=1e-6)
-        print(theoretical)
-        self.assertAllClose(theoretical[0], numerical[0], 1e-5)
+            return matrix_sign(tensor, tf.constant(100), tf.constant(1e-6))[0]
+        theoretical, numerical = tf.test.compute_gradient(fun, [self.tensor], delta=1e-2)
+        self.assertAllClose(theoretical[0], numerical[0], atol=1e-2)
+        sc_sign = linalg.signm(self.tensor[0].numpy())
+        tf_sign = fun(self.tensor)[0].numpy()
+        self.assertAllClose(sc_sign, tf_sign, atol=1e-6)
 
 
 def _measure_time(fun, *args):
@@ -54,7 +55,7 @@ class TestRicatti(tf.test.TestCase):
         np.random.seed(42)
         self.horizon = tf.constant(100.)
         self.batch_size = 1
-        self.n_particles = 20
+        self.n_particles = 5
         self.dimension = 2
 
         choice = np.random.binomial(1, 0.25, [self.batch_size, self.n_particles]).astype(bool)
@@ -67,13 +68,13 @@ class TestRicatti(tf.test.TestCase):
 
         self.np_x = np.random.normal(0.1, 0.7, [self.batch_size, self.n_particles, self.dimension]).astype(np.float32)
         self.x = tf.constant(self.np_x)
-        self.transport_matrix, _ = transport(self.x, self.log_w, tf.constant(0.5), tf.constant(0.85),
+        self.transport_matrix = transport(self.x, self.log_w, tf.constant(0.5), tf.constant(0.85),
                                              tf.constant(1e-3),
                                              tf.constant(500), tf.constant(self.n_particles))
 
         self.naive_instance = NaiveSolver(horizon=self.horizon, threshold=tf.constant(1e-3),
                                           step_size=tf.constant(0.05))
-        self.petkov_instance = PetkovSolver(tf.constant(100), use_newton_schulze=False)
+        self.petkov_instance = PetkovSolver(tf.constant(10), use_newton_schulze=False)
 
     def test_make_A(self):
         A = _make_A(self.transport_matrix, self.w, float(self.n_particles))
@@ -138,10 +139,11 @@ class TestRicatti(tf.test.TestCase):
         print('sc_toc', sc_toc)
         print('naive_toc', naive_toc)
         print('sign_toc', sign_toc)
+        self.assertAllClose(tf.transpose(sc_sol), sc_sol, atol=1e-10)
+        self.assertAllClose(sign_result[0], tf.transpose(sign_result[0]), atol=1e-5)
 
         self.assertAllClose(naive_result[0], sc_sol, atol=1e-1)
-        # self.assertAllClose(naive_result, sign_result)
-        self.assertAllClose(sign_result[0], sc_sol, atol=1e-3)
+        self.assertAllClose(sign_result[0], sc_sol, atol=1e-4)
 
         # ode_fn = make_ode_fun(A, self.transport_matrix)
         #

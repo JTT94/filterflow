@@ -32,8 +32,8 @@ class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
         :param stop_gradient: bool
             Should the resampling step propagate the stitched gradients or not
        """
-        self._on_log = tf.cast(on_log, bool)
-        self._stop_gradient = tf.cast(stop_gradient, bool)
+        self._on_log = on_log
+        self._stop_gradient = stop_gradient
         super(StandardResamplerBase, self).__init__(name=name)
 
     @staticmethod

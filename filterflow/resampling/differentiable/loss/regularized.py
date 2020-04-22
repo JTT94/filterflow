@@ -25,7 +25,7 @@ class SinkhornLoss(Loss):
         """
         super(SinkhornLoss, self).__init__(name=name)
 
-        self.symmetric = tf.cast(symmetric, bool)
+        self.symmetric = symmetric
         self.convergence_threshold = tf.cast(convergence_threshold, float)
         self.max_iter = tf.cast(max_iter, tf.dtypes.int32)
         self.epsilon = tf.cast(epsilon, float)

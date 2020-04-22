@@ -32,13 +32,14 @@ class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
         self.max_iter = tf.cast(max_iter, tf.dtypes.int32)
         self.epsilon = tf.cast(epsilon, float)
         self.scaling = tf.cast(scaling, float)
-        self.propagate_correction_gradient = tf.cast(propagate_correction_gradient, bool)
+        self.propagate_correction_gradient = propagate_correction_gradient
         if ricatti_solver is None:
             self.ricatti_solver = PetkovSolver(tf.constant(10))
         else:
             self.ricatti_solver = ricatti_solver
         super(CorrectedRegularizedTransform, self).__init__(name=name)
 
+    @tf.function
     def apply(self, state: State, flags: tf.Tensor):
         """ Resampling method
 
@@ -50,8 +51,8 @@ class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
         :rtype: State
         """
         # TODO: The real batch_size is the sum of flags. We shouldn't do more operations than we need...
-        transport_matrix, _ = transport(state.particles, state.log_weights, self.epsilon, self.scaling,
-                                        self.convergence_threshold, self.max_iter, state.n_particles)
+        transport_matrix = transport(state.particles, state.log_weights, self.epsilon, self.scaling,
+                                     self.convergence_threshold, self.max_iter, state.n_particles)
         weights = state.weights
         transport_correction = self.ricatti_solver(transport_matrix, weights)
         if not self.propagate_correction_gradient:

@@ -34,8 +34,8 @@ class TestSinkhorn(tf.test.TestCase):
         self.uniform_logw = tf.zeros_like(degenerate_weights) - tf.math.log(float(n_particles))
 
     def test_transport(self):
-        T_scaled, total_iter_scaled = transport(self.x, self.degenerate_logw, self.epsilon, 0.95, self.threshold,
-                                                self.n_iter, self.n_particles)
+        T_scaled = transport(self.x, self.degenerate_logw, self.epsilon, 0.95, self.threshold,
+                             self.n_iter, self.n_particles)
 
         self.assertAllClose(tf.constant(self.degenerate_weights) * tf.cast(self.n_particles, float),
                             tf.reduce_sum(T_scaled, 1))
@@ -53,7 +53,7 @@ class TestSinkhorn(tf.test.TestCase):
     def test_gradient_transport(self):
         @tf.function
         def fun_x(x):
-            transport_matrix, _ = transport(x, self.degenerate_logw, self.epsilon, tf.constant(0.975), self.threshold,
+            transport_matrix, = transport(x, self.degenerate_logw, self.epsilon, tf.constant(0.975), self.threshold,
                                             self.n_iter, self.n_particles)
             return tf.math.reduce_sum(tf.einsum('ijk,ikm->ijm', transport_matrix, x))
 
@@ -61,7 +61,7 @@ class TestSinkhorn(tf.test.TestCase):
         def fun_logw(logw):
             logw = logw - tf.reduce_logsumexp(logw, 1, keepdims=True)
 
-            transport_matrix, _ = transport(self.x, logw, self.epsilon, tf.constant(0.9),
+            transport_matrix, = transport(self.x, logw, self.epsilon, tf.constant(0.9),
                                             self.threshold, self.n_iter, self.n_particles)
             return tf.math.reduce_sum(tf.einsum('ijk,ikm->ijm', transport_matrix, self.x))
 

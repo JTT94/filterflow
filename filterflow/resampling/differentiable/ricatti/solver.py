@@ -1,5 +1,7 @@
 import abc
 
+import numpy as np
+import scipy.linalg as linalg
 import tensorflow as tf
 
 LOGGER = tf.get_logger()
@@ -75,9 +77,6 @@ class Euler(BaseSolver):
                                                                         tf.constant(float('inf')),
                                                                         tf.constant(True)])
         if not final_decreasing:
-            tf.print("Ricatti solver didn't converge - this iterate was not corrected. "
-                     "Try with a smaller step size or increase precision in Sinkhorn iterates")
-            tf.print("final error: ", final_diff)
             return z_0
 
         return final_z
@@ -177,44 +176,62 @@ def schur_decomposition(tensor, max_iter, sort=False):
     return Q_res, U_res
 
 
+def np_solve_sylvester(tensors, sign_matrices, d_sign_matrices):
+    res = np.empty_like(tensors)
+    for k in range(tensors.shape[0]):
+        tensor = tensors[k]
+        sign_matrix = sign_matrices[k]
+        d_sign_matrix = d_sign_matrices[k]
+        q = np.dot(tensor, d_sign_matrix) - np.dot(d_sign_matrix, tensor)
+        a = sign_matrix
+        b = -sign_matrix
+        res[k] = linalg.solve_sylvester(a, b, q)
+    return res
+
+
+def tf_solve_sylvester(tensor, sign, d_sign):
+    d_tensor = tf.numpy_function(np_solve_sylvester, [tensor, sign, d_sign], tf.float32)
+    return d_tensor
+
+
 @tf.function
-def matrix_sign(tensor, n_iter, use_newton_schulze=True, threshold=1e-5):
+@tf.custom_gradient
+def matrix_sign(tensor, n_iter, threshold=1e-5):
     # TODO: maybe autodiff: th5.7 in https://www.maths.manchester.ac.uk/~higham/fm/OT104HighamChapter5.pdf
+    n = tensor.shape[1]
 
     eye = tf.eye(tensor.shape[1], batch_shape=[tensor.shape[0]])
     float_n = tf.cast(tensor.shape[1], float)
 
-    # vals = tf.abs(tf.linalg.svd(tensor, compute_uv=False))
-    # TODO: for some reason svd fails with a cryptic error... Will need to reproduce and send to tf support
+    sqrt_svd_vals = tf.stop_gradient(tf.math.sqrt(tf.linalg.svd(tensor, compute_uv=False)))
+    # no need for backprop as this *should* not impact the result
 
-    vals = tf.stop_gradient(tf.abs(tf.linalg.eigvals(tensor)))
-    # we don't need the gradient, this is a numerical trick to prevent underflow
-    INF = tf.fill(vals.shape, 1e6)
-    non_null_vals = tf.where(tf.abs(vals) > 0., vals, INF)
+    max_ = tf.reduce_max(sqrt_svd_vals)
+    non_null_vals = tf.where(tf.abs(sqrt_svd_vals) > 0., sqrt_svd_vals, max_)
 
     min_non_zero = tf.reshape(tf.reduce_min(non_null_vals, 1), [-1, 1, 1])
-    shifted_tensor = tensor + 0.5 * min_non_zero * eye
+    shifted_tensor = tensor + min_non_zero * eye
+
 
     @tf.function
     def one_step(X):
-        if use_newton_schulze:
-            X_2 = tf.matmul(X, X)
-            X_new = 0.5 * (tf.linalg.matmul(X, 3 * eye - X_2))
-        else:
-            det = tf.abs(tf.linalg.det(X))
-            scaling_factor = tf.reshape(tf.math.pow(det, -1 / float_n), [-1, 1, 1])
-            scaled_X = scaling_factor * X
-            X_inv = tf.linalg.inv(scaled_X)
-            X_new = 0.5 * (scaled_X + X_inv)
-        return X_new
+        det = tf.stop_gradient(tf.abs(tf.linalg.det(X)))
+        mask = tf.reshape(det > 0, [-1, 1, 1])
+        scaling_factor = tf.reshape(tf.math.pow(det, -1 / float_n), [-1, 1, 1])
+        scaled_X = tf.where(mask, scaling_factor * X, tf.eye(X.shape[1], batch_shape=[X.shape[0]]))
+        X_inv = tf.linalg.inv(scaled_X)
+        X_new = tf.where(mask, 0.5 * (scaled_X + X_inv), X)
+        return X_new, mask
 
     def cond(_X, error, i):
         cond_val = tf.logical_and(i < n_iter, error > threshold)
         return cond_val
 
     def body(X, error, i):
-        new_X = one_step(X)
-        temp = 0.5 * (tf.matmul(new_X, new_X) + new_X)
+        new_X, mask = one_step(X)
+
+        temp = tf.where(mask, 0.5 * (tf.matmul(new_X, new_X) + new_X),
+                        tf.eye(new_X.shape[1], batch_shape=[new_X.shape[0]]))
         new_error = tf.reduce_max(tf.linalg.norm(tf.matmul(temp, temp) - temp, ord=1, axis=[1, 2]))
 
         return new_X, new_error, tf.add(i, 1)
@@ -222,9 +239,22 @@ def matrix_sign(tensor, n_iter, use_newton_schulze=True, threshold=1e-5):
     i0 = tf.constant(0)
     init_error = 2. * threshold
 
-    sign, _final_error, _final_i = tf.while_loop(cond, body, [shifted_tensor, init_error, i0])
-    mask = tf.math.is_finite(sign)
-    return tf.where(mask, sign, tf.zeros_like(sign))
+    sign, _final_error, final_i = tf.while_loop(cond,
+                                                      body,
+                                                      [shifted_tensor,
+                                                       init_error,
+                                                       i0,
+                                                       ])
+
+    @tf.function
+    def grad(d_sign):
+        d_sign_non_null = tf.reshape(tf.reduce_max(tf.abs(d_sign), [1, 2]) > 0, [-1, 1, 1])
+        grad_val, = tf.gradients(sign, [tensor], d_sign)
+        grad_val_non_nan = tf.math.is_finite(grad_val)
+        grad_val = tf.where(tf.logical_and(d_sign_non_null, grad_val_non_nan), grad_val, 0.)
+        return grad_val, None, None
+
+    return sign, grad
 
 
 @tf.function
@@ -238,42 +268,88 @@ def _block_matrix(I, J, K, L):
     return res
 
 
+@tf.function
 @tf.custom_gradient
-def _solve_petkov(A, transport_matrix, n, n_iter, use_newton_schulze):
+def qr(projector):
+    q, r = tf.linalg.qr(projector)
+
+    @tf.function
+    def grad(dq):
+        qdq = tf.matmul(q, dq, transpose_a=True)
+        qdq_ = qdq - tf.linalg.matrix_transpose(qdq)
+        r_diag = tf.linalg.diag_part(r)
+        clipped_r_diag = tf.clip_by_value(r_diag, -float('inf'), -1e-5)
+        # just make sure that r is "invertible", this doesn't change the result as dq is null on the second part
+        clipped_r_diag = tf.where(r_diag > 0., r_diag, clipped_r_diag)
+        clipped_r = r - tf.linalg.diag(r_diag) + tf.linalg.diag(clipped_r_diag)
+        tril = tf.linalg.band_part(qdq_, -1, 0)
+
+        def _triangular_solve(x):
+            """Equiv to matmul(x, adjoint(matrix_inverse(r))) if r is upper-tri."""
+            t_x = tf.linalg.matrix_transpose(x)
+            return tf.linalg.matrix_transpose(tf.linalg.triangular_solve(clipped_r, t_x, lower=False, adjoint=False))
+
+        grad_val = tf.matmul(q, _triangular_solve(tril))
+        return tf.clip_by_value(grad_val, -1., 1.)  # anything outside results from a numerical instability.
+
+    return q, grad
+
+
+@tf.function
+def _solve_petkov(A, transport_matrix, n, n_iter):
     I = tf.eye(n, batch_shape=[transport_matrix.shape[0]])
 
     transport_matrix_t = tf.linalg.matrix_transpose(transport_matrix)
     hamiltonian_matrix = _block_matrix(-transport_matrix, -I, -A, transport_matrix_t)
 
-    sign_matrix = matrix_sign(hamiltonian_matrix, n_iter, use_newton_schulze)
+    sign_matrix = matrix_sign(hamiltonian_matrix, n_iter)
     projector = 0.5 * (tf.eye(2 * n, batch_shape=[transport_matrix.shape[0]]) - sign_matrix)
-    Q, _ = tf.linalg.qr(projector)
+    Q = qr(projector)
 
     upper_left = Q[:, :n, :n]
     lower_left = Q[:, n:, :n]
 
     # TODO: Solve or invert?
-    # delta = tf.linalg.matmul(lower_left, tf.linalg.inv(upper_left))
-
+    # TODO: the below should use the Linear Operator paradigm for optimization
     delta = tf.linalg.solve(upper_left, tf.linalg.matrix_transpose(lower_left), adjoint=True)
-    delta = _make_admissible(delta)
+    ode_fun = make_ode_fun(A, transport_matrix)
 
-    def grad(d_delta):
-        d_delta = tf.clip_by_value(d_delta, -1., 1.)
-        dA, d_transport = tf.gradients(delta, [A, transport_matrix], d_delta)
-        return dA, d_transport, None, None, None
+    ode_res = tf.reduce_mean(tf.abs(ode_fun(0., delta)))
+    mask = tf.reshape(ode_res < 1e-2, [-1, 1, 1])
 
-    return delta, grad
+    delta = tf.where(mask, delta, 0.)
+
+    return delta
 
 
 class PetkovSolver(RicattiSolver):
+    """https://www.researchgate.net/publication/221014504_Numerical_Solution_of_High_Order_Matrix_Riccati_Equations
+    """
+
     def __init__(self, n_iter, use_newton_schulze=False, name='PetkovSolver'):
         super(PetkovSolver, self).__init__(name=name)
         self._n_iter = tf.cast(n_iter, tf.int32)
-        self._use_newton_schulze = tf.cast(use_newton_schulze, bool)
 
-    def __call__(self, transport_matrix, w):
+    @staticmethod
+    @tf.function
+    @tf.custom_gradient
+    def _call(transport_matrix, w, n_iter):
         n = transport_matrix.shape[1]
         A = _make_A(transport_matrix, w, n)
-        res = _solve_petkov(A, transport_matrix, n, self._n_iter, self._use_newton_schulze)
-        return res
+        res = _solve_petkov(A, transport_matrix, n, n_iter)
+
+        @tf.function
+        def grad(dres):
+            dres_non_null = tf.reduce_max(tf.abs(dres), [1, 2]) > 0.
+            dres = tf.clip_by_value(dres, -1., 1.)
+            d_transport, dw = tf.gradients(res, [transport_matrix, w], dres)
+
+            d_transport = tf.where(tf.reshape(dres_non_null, [-1, 1, 1]), d_transport, 0.)
+            dw = tf.where(tf.reshape(dres_non_null, [-1, 1]), dw, 0.)
+
+            return d_transport, dw, None
+
+        return res, grad
+
+    def __call__(self, transport_matrix, w):
+        return self._call(transport_matrix, w, self._n_iter)
