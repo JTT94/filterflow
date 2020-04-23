@@ -2,14 +2,13 @@ import attr
 import tensorflow as tf
 
 from filterflow.base import State, Module, DTYPE_TO_STATE_SERIES
+from filterflow.constants import MIN_RELATIVE_LOG_WEIGHT
 from filterflow.observation.base import ObservationModelBase
 from filterflow.proposal.base import ProposalModelBase
 from filterflow.resampling.base import ResamplerBase
 from filterflow.resampling.criterion import ResamplingCriterionBase
 from filterflow.transition.base import TransitionModelBase
 from filterflow.utils import normalize
-
-MIN_RELATIVE_LOG_WEIGHT = tf.constant(-2.)
 
 
 class SMC(Module):
@@ -78,6 +77,7 @@ class SMC(Module):
         normalized_log_weights = tf.clip_by_value(normalized_log_weights,
                                                   MIN_RELATIVE_LOG_WEIGHT * float_n_particles,
                                                   tf.constant(float('inf')))
+        normalized_log_weights = normalize(normalized_log_weights, 1, True)
         return attr.evolve(proposed_state, weights=tf.math.exp(normalized_log_weights),
                            log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)
 

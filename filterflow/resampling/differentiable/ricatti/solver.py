@@ -195,6 +195,15 @@ def tf_solve_sylvester(tensor, sign, d_sign):
 
 
 @tf.function
+def _matrix_norm(tensor, axis):
+    """axis = 1 means summing over lines - norm 1
+       axis = 2 means summing over columns - norm sup"""
+    abs_tensor = tf.abs(tensor)
+    sum_ = tf.reduce_sum(abs_tensor, axis)
+    return tf.reduce_max(sum_, axis=-1)
+
+
+@tf.function
 @tf.custom_gradient
 def matrix_sign(tensor, n_iter, threshold=1e-5):
     # TODO: maybe autodiff: th5.7 in https://www.maths.manchester.ac.uk/~higham/fm/OT104HighamChapter5.pdf
@@ -211,10 +220,17 @@ def matrix_sign(tensor, n_iter, threshold=1e-5):
 
     min_non_zero = tf.reshape(tf.reduce_min(non_null_vals, 1), [-1, 1, 1])
     shifted_tensor = tensor + min_non_zero * eye
-
+    newton_schulz_flag = tf.reduce_all(_matrix_norm(eye - tf.matmul(tensor, tensor), 1) < 1.)
 
     @tf.function
-    def one_step(X):
+    def newton_schulz(X):
+        # this is faster and more stable but only locally convergent
+        X_new = 0.5 * tf.matmul(X, 3 * eye - tf.matmul(X, X))
+        mask = tf.ones_like(X_new, dtype=tf.bool)
+        return X_new, mask
+
+    @tf.function
+    def newton(X):
         det = tf.stop_gradient(tf.abs(tf.linalg.det(X)))
         mask = tf.reshape(det > 0, [-1, 1, 1])
         scaling_factor = tf.reshape(tf.math.pow(det, -1 / float_n), [-1, 1, 1])
@@ -223,12 +239,17 @@ def matrix_sign(tensor, n_iter, threshold=1e-5):
         X_new = tf.where(mask, 0.5 * (scaled_X + X_inv), X)
         return X_new, mask
 
+    @tf.function
     def cond(_X, error, i):
         cond_val = tf.logical_and(i < n_iter, error > threshold)
         return cond_val
 
+    @tf.function
     def body(X, error, i):
-        new_X, mask = one_step(X)
+        if newton_schulz_flag:
+            new_X, mask = newton_schulz(X)
+        else:
+            new_X, mask = newton(X)
 
         temp = tf.where(mask, 0.5 * (tf.matmul(new_X, new_X) + new_X),
                         tf.eye(new_X.shape[1], batch_shape=[new_X.shape[0]]))
@@ -240,11 +261,11 @@ def matrix_sign(tensor, n_iter, threshold=1e-5):
     init_error = 2. * threshold
 
     sign, _final_error, final_i = tf.while_loop(cond,
-                                                      body,
-                                                      [shifted_tensor,
-                                                       init_error,
-                                                       i0,
-                                                       ])
+                                                body,
+                                                [shifted_tensor,
+                                                 init_error,
+                                                 i0,
+                                                 ])
 
     @tf.function
     def grad(d_sign):
@@ -310,7 +331,7 @@ def _solve_petkov(A, transport_matrix, n, n_iter):
     lower_left = Q[:, n:, :n]
 
     # TODO: Solve or invert?
-    # TODO: the below should use the Linear Operator paradigm for optimization
+    # TODO: the below should use the Linear Operator paradigm for optimization - upper_left is diagonal dominated...
     delta = tf.linalg.solve(upper_left, tf.linalg.matrix_transpose(lower_left), adjoint=True)
     ode_fun = make_ode_fun(A, transport_matrix)
 
@@ -319,7 +340,7 @@ def _solve_petkov(A, transport_matrix, n, n_iter):
 
     delta = tf.where(mask, delta, 0.)
 
-    return delta
+    return _make_admissible(delta)
 
 
 class PetkovSolver(RicattiSolver):
@@ -341,13 +362,13 @@ class PetkovSolver(RicattiSolver):
         @tf.function
         def grad(dres):
             dres_non_null = tf.reduce_max(tf.abs(dres), [1, 2]) > 0.
-            dres = tf.clip_by_value(dres, -1., 1.)
+            dres = _make_admissible(dres)
             d_transport, dw = tf.gradients(res, [transport_matrix, w], dres)
 
             d_transport = tf.where(tf.reshape(dres_non_null, [-1, 1, 1]), d_transport, 0.)
             dw = tf.where(tf.reshape(dres_non_null, [-1, 1]), dw, 0.)
 
-            return d_transport, dw, None
+            return tf.clip_by_value(d_transport, -1., 1.), tf.clip_by_value(dw, -1., 1.), None
 
         return res, grad
 

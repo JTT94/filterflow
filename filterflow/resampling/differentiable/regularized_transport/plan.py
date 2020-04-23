@@ -1,5 +1,6 @@
 import tensorflow as tf
 
+from filterflow.constants import MIN_RELATIVE_LOG_WEIGHT
 from filterflow.resampling.differentiable.regularized_transport.sinkhorn import sinkhorn_potentials
 from filterflow.resampling.differentiable.regularized_transport.utils import cost
 
@@ -10,7 +11,6 @@ def _fillna(tensor):
 
 
 @tf.function
-# @tf.custom_gradient
 def transport_from_potentials(x, f, g, eps, logw, n):
     """
     To get the transported particles from the sinkhorn iterates
@@ -41,12 +41,6 @@ def transport_from_potentials(x, f, g, eps, logw, n):
     temp = temp + tf.expand_dims(logw, 1)
 
     transport_matrix = tf.math.exp(temp)
-
-    # @tf.function
-    # def grad(d_matrix):
-    #     d_matrix = tf.clip_by_value(d_matrix, -1., 1.)
-    #     dx, df, dg, dlogw = tape.gradient(transport_matrix, [x, f, g, logw], d_matrix)
-    #     return dx, df, dg, None, dlogw, None
 
     return transport_matrix  # , grad
 
@@ -79,7 +73,7 @@ def transport(x, logw, eps, scaling, threshold, max_iter, n):
 
     def grad(d_transport):
         d_transport = tf.clip_by_value(d_transport, -1., 1.)
-        mask = logw > -3. * tf.math.log(float_n)  # the particle has died out really.
+        mask = logw > MIN_RELATIVE_LOG_WEIGHT * tf.math.log(float_n)  # the other particles have died out really.
         dx, dlogw = tf.gradients(transport_matrix, [x, logw], d_transport)
         dlogw = tf.where(mask, dlogw, 0.)
         dx = tf.where(tf.expand_dims(mask, -1), dx, 0.)  # set all dimensions of the same particle to 0.

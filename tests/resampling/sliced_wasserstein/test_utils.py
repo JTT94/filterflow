@@ -1,7 +1,7 @@
 import tensorflow as tf
 from scipy.stats.stats import _cdf_distance as st_cdf_distance
 
-from filterflow.resampling.differentiable.sliced_wasserstein.utils import _cdf_distance
+from filterflow.resampling.differentiable.loss.sliced_wasserstein import _cdf_distance
 
 
 class TestUtils(tf.test.TestCase):
