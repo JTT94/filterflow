@@ -38,19 +38,14 @@ class TestBaseClasses(tf.test.TestCase):
 
     def test_state(self):
         with self.assertRaises(ValueError):
-            _ = State(0., 0., 0., 0.)
+            _ = State(0., 0., 0., 0., 0., None)
 
         with self.assertRaises(AssertionError):
-            _ = State(np.zeros([5, 5]), np.zeros([5, 5]), np.zeros([5, 5]), np.zeros([5]))
-        with self.assertRaises(AssertionError):
-            _ = State(np.zeros([5, 5, 1]), np.zeros([5]), np.zeros([5, 5]), np.zeros([5]))
-        with self.assertRaises(AssertionError):
-            _ = State(np.zeros([5, 5, 1]), np.zeros([5, 5]), np.zeros([5]), np.zeros([5]))
-        with self.assertRaises(AssertionError):
-            _ = State(np.zeros([5, 5, 1]), np.zeros([5, 5]), np.zeros([5, 5]), np.zeros([5, 2]))
+            _ = State(np.zeros([5, 5]), np.zeros([5, 5]), np.zeros([5, 5]), np.zeros([5]), np.zeros([5, 5]), None)
 
         with self.assertNoLogs():
-            state = State(np.random.uniform(0., 1., [5, 5, 1]), np.zeros([5, 5]), np.zeros([5, 5]), np.zeros([5, ]))
+            state = State(np.random.uniform(0., 1., [5, 5, 1]), np.zeros([5, 5]), np.zeros([5, 5]), np.zeros([5, ]),
+                          np.zeros([5, 5]), None)
             self._test_function(state)
 
     def test_state_series(self):
@@ -66,9 +61,8 @@ class TestBaseClasses(tf.test.TestCase):
         weights = np.random.uniform(0., 1., [5, 10]).astype(np.float32)
         log_weights = np.random.uniform(0., 1., [5, 10]).astype(np.float32)
         log_likelihoods = np.random.uniform(0., 1., [5]).astype(np.float32)
-        state = State(particles, log_weights, weights, log_likelihoods)
+        state = State(particles, log_weights, weights, log_likelihoods, None, None)
 
         res = fun(state)
         self.assertIsInstance(res, StateSeries)
         self.assertIsInstance(res.read(5), State)
-

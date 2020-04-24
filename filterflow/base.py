@@ -72,6 +72,8 @@ class State:
     log_weights = attr.ib(validator=_dim_2_validator)
     weights = attr.ib(validator=_dim_2_validator)
     log_likelihoods = attr.ib(validator=_dim_1_validator)
+    ancestor_indices = attr.ib(validator=attr.validators.optional(_dim_2_validator))
+    resampling_correction = attr.ib(validator=attr.validators.optional(_dim_1_validator))
 
     @property
     def batch_size(self):
@@ -85,11 +87,22 @@ class State:
     def dimension(self):
         return self.particles.shape[2]
 
+    def __attrs_post_init__(self):
+        if self.ancestor_indices is None:
+            ancestor_indices = tf.range(self.n_particles)
+            ancestor_indices = tf.tile(tf.expand_dims(ancestor_indices, 0), [self.batch_size, 1])
+            object.__setattr__(self, 'ancestor_indices', ancestor_indices)
+
+        if self.resampling_correction is None:
+            object.__setattr__(self, 'resampling_correction', tf.zeros(self.batch_size))
+
 
 @attr.s
 class StateWithMemory(State):
     ADDITIONAL_STATE_VARIABLES = ('rnn_state',)
     rnn_state = attr.ib(validator=_dim_3_validator)
+    ancestor_indices = attr.ib(validator=attr.validators.optional(_dim_2_validator),
+                               default=None)
 
 
 @attr.s(frozen=True)
@@ -169,7 +182,9 @@ class StateSeries(DataSeries, metaclass=abc.ABCMeta):
         state = State(particles=particles,
                       log_weights=log_weights,
                       weights=weights,
-                      log_likelihoods=log_likelihoods)
+                      log_likelihoods=log_likelihoods,
+                      ancestor_indices=None,
+                      resampling_correction=None)
         return state
 
 
@@ -197,6 +212,8 @@ class Observation:
     def __attrs_post_init__(self):
         if isinstance(self.observation, Observation):
             self.observation = self.observation.observation
+
+
 @attr.s(frozen=True)
 class ObservationSeries(DataSeries, metaclass=abc.ABCMeta):
     DTYPE = None

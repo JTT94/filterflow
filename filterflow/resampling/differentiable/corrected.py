@@ -12,6 +12,8 @@ from filterflow.resampling.differentiable.ricatti.solver import PetkovSolver
 class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
     """Regularised Transform - docstring to come."""
 
+    DIFFERENTIABLE = True
+
     # TODO: Document this really nicely
     def __init__(self, epsilon, scaling=0.75, max_iter=100, convergence_threshold=1e-3, ricatti_solver=None,
                  propagate_correction_gradient=True, name='RegularisedTransform'):

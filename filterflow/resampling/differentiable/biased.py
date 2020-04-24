@@ -31,6 +31,7 @@ def apply_transport_matrix(state: State, transport_matrix: tf.Tensor, flags: tf.
 
 class RegularisedTransform(ResamplerBase, metaclass=abc.ABCMeta):
     """Regularised Transform - docstring to come."""
+    DIFFERENTIABLE = True
 
     # TODO: Document this really nicely
     def __init__(self, epsilon, scaling=0.75, max_iter=100, convergence_threshold=1e-3, name='RegularisedTransform'):

@@ -22,7 +22,8 @@ class TestOptimizedPointCloud(tf.test.TestCase):
         particles = tf.random.uniform((batch_size, n_particles, dimension), -1, 1)
         log_likelihoods = tf.zeros(batch_size, dtype=float)
         self.state = State(particles=particles, log_weights=tf.math.log(weights),
-                           weights=weights, log_likelihoods=log_likelihoods)
+                           weights=weights, log_likelihoods=log_likelihoods,
+                           ancestor_indices=None, resampling_correction=None)
 
         self.loss = SinkhornLoss(tf.constant(0.05))
         loss_optimizer = SGD(self.loss, lr=0.5, n_iter=10)

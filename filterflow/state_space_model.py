@@ -1,18 +1,17 @@
 import attr
 import tensorflow as tf
-import numpy as np
-from filterflow.base import State, Observation, InputsBase, Module, StateSeries, DTYPE_TO_OBSERVATION_SERIES, DTYPE_TO_STATE_SERIES
+
+from filterflow.base import State, Module, StateSeries
 from filterflow.observation.base import ObservationSampler
 from filterflow.transition.base import TransitionModelBase
-from filterflow.utils import normalize
 
 
 class StateSpaceModel(Module):
-    def __init__(self, observation_model: ObservationSampler, transition_model: TransitionModelBase, name='StateSpaceModel'):
+    def __init__(self, observation_model: ObservationSampler, transition_model: TransitionModelBase,
+                 name='StateSpaceModel'):
         super(StateSpaceModel, self).__init__(name=name)
         self._observation_model = observation_model
         self._transition_model = transition_model
-
 
     def sample_state(self, state: State):
         """Apply transition on latent state"
@@ -39,15 +38,17 @@ class StateSpaceModel(Module):
         initial_particle = tf.reshape(state_value, [1, 1, dim])
 
         # create state object with 1 batch and 1 particle
-        weights = tf.ones((1, 1), dtype=dtype )
+        weights = tf.ones((1, 1), dtype=dtype)
         log_likelihoods = tf.zeros((1), dtype=dtype)
-        initial_state = State(initial_particle, 
-                            log_weights= tf.math.log(weights),
-                            weights=weights, 
-                            log_likelihoods=log_likelihoods)
+        initial_state = State(initial_particle,
+                              log_weights=tf.math.log(weights),
+                              weights=weights,
+                              log_likelihoods=log_likelihoods,
+                              ancestor_indices=None,
+                              resampling_correction=None)
         return initial_state
 
-    def sample(self, state_value: tf.Tensor, n_steps : int):
+    def sample(self, state_value: tf.Tensor, n_steps: int):
         """
         :param state_value: Tensor
             initial state of the filter
@@ -62,13 +63,13 @@ class StateSpaceModel(Module):
         # init particle
         initial_state = self.init_state(state_value)
         state = attr.evolve(initial_state)
-        
+
         # get observation dim
         test_obs = self.sample_observation(state)
         obs_dim = test_obs.shape[2]
-        
+
         # init tensor arrays for recording states and outputs
-         # init series
+        # init series
         states = []
         observations = []
         # forward loop
@@ -76,14 +77,13 @@ class StateSpaceModel(Module):
             state_particle = self.sample_state(state)
             state = attr.evolve(state, particles=state_particle)
             observation = self.sample_observation(state)
-            
+
             observations.append(observation)
             states.append(state)
 
         return states, observations
 
-
-    def __call__(self, state_value: tf.Tensor, n_steps : int):
+    def __call__(self, state_value: tf.Tensor, n_steps: int):
         states, observations = self.sample(state_value, n_steps)
-        
+
         return states, observations

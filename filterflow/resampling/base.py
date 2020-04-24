@@ -14,6 +14,7 @@ def resample(tensor: tf.Tensor, new_tensor: tf.Tensor, flags: tf.Tensor):
 
 class ResamplerBase(Module, metaclass=abc.ABCMeta):
     """Abstract ResamplerBase."""
+    DIFFERENTIABLE = False
 
     @abc.abstractmethod
     def apply(self, state: State, flags: tf.Tensor):
@@ -29,6 +30,7 @@ class ResamplerBase(Module, metaclass=abc.ABCMeta):
 
 
 class NoResampling(ResamplerBase):
+    DIFFERENTIABLE = True
 
     def apply(self, state: State, flags: tf.Tensor):
         """ Resampling method

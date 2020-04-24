@@ -15,16 +15,19 @@ def _discrete_percentile_function(spacings, n_particles, on_log, weights=None, l
         cumlogsumexp = tf.math.cumulative_logsumexp(log_weights, axis=1)
         log_spacings = tf.math.log(spacings)
         indices = tf.searchsorted(cumlogsumexp, log_spacings, side='left')
+
     else:
         cum_sum = tf.math.cumsum(weights, axis=1)
         indices = tf.searchsorted(cum_sum, spacings, side='left')
+
     return tf.clip_by_value(indices, 0, n_particles - 1)
 
 
 class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
     """Abstract ResamplerBase."""
+    DIFFERENTIABLE = False
 
-    def __init__(self, name, on_log=True, stop_gradient=True):
+    def __init__(self, name, on_log):
         """Constructor
 
         :param on_log: bool
@@ -33,7 +36,6 @@ class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
             Should the resampling step propagate the stitched gradients or not
        """
         self._on_log = on_log
-        self._stop_gradient = stop_gradient
         super(StandardResamplerBase, self).__init__(name=name)
 
     @staticmethod
@@ -59,9 +61,10 @@ class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
         # TODO: We should be able to get log spacings directly to always stay in log space.
         indices = _discrete_percentile_function(spacings, n_particles, self._on_log, state.weights,
                                                 state.log_weights)
+
+        ancestor_indices = tf.where(tf.reshape(flags, [-1, 1]), indices, tf.reshape(tf.range(n_particles), [1, -1]))
+
         new_particles = tf.gather(state.particles, indices, axis=1, batch_dims=1, validate_indices=False)
-        if self._stop_gradient:
-            new_particles = tf.stop_gradient(new_particles)
 
         float_n_particles = tf.cast(n_particles, float)
         uniform_weights = tf.ones_like(state.weights) / float_n_particles
@@ -76,9 +79,7 @@ class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
         for additional_state_variable in state.ADDITIONAL_STATE_VARIABLES:
             state_variable = getattr(state, additional_state_variable)
             new_state_variable = tf.gather(state_variable, indices, axis=1, batch_dims=1, validate_indices=False)
-            if self._stop_gradient:
-                new_state_variable = tf.stop_gradient(new_state_variable)
             additional_variables[additional_state_variable] = resample(state_variable, new_state_variable, flags)
 
         return attr.evolve(state, particles=resampled_particles, weights=resampled_weights,
-                           log_weights=resampled_log_weights, **additional_variables)
+                           log_weights=resampled_log_weights, ancestor_indices=ancestor_indices, **additional_variables)

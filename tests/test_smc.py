@@ -2,6 +2,9 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
+tf.config.set_visible_devices([], 'GPU')
+tf.function = lambda x: x
+
 from filterflow.base import State, StateSeries
 from filterflow.observation.linear import LinearObservationModel
 from filterflow.proposal import BootstrapProposalModel
@@ -22,7 +25,7 @@ class TestSMC(tf.test.TestCase):
         initial_particles = tf.random.uniform((batch_size, n_particles, dimension), -1, 1)
         log_likelihoods = tf.zeros((batch_size), dtype=float)
         self.initial_state = State(particles=initial_particles, log_weights=tf.math.log(weights), weights=weights,
-                                   log_likelihoods=log_likelihoods)
+                                   log_likelihoods=log_likelihoods, ancestor_indices=None, resampling_correction=None)
 
         error_variance = tf.constant([0.5], dtype=tf.float32)
         error_rv = tfp.distributions.MultivariateNormalDiag(tf.constant([0.]),

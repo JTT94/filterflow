@@ -14,7 +14,7 @@ from filterflow.utils import normalize
 class SMC(Module):
     def __init__(self, observation_model: ObservationModelBase, transition_model: TransitionModelBase,
                  proposal_model: ProposalModelBase, resampling_criterion: ResamplingCriterionBase,
-                 resampling_method: ResamplerBase, name='SMC'):
+                 resampling_method: ResamplerBase, correct_gradient=False, name='SMC'):
         super(SMC, self).__init__(name=name)
         self._observation_model = observation_model
         self._transition_model = transition_model
@@ -34,8 +34,8 @@ class SMC(Module):
         """
         return self._transition_model.sample(state, inputs)
 
-    def update(self, state: State, observation: tf.Tensor,
-               inputs: tf.Tensor):
+    @tf.function
+    def update(self, state: State, observation: tf.Tensor, inputs: tf.Tensor):
         """
         :param state: State
             current state of the filter
@@ -51,8 +51,24 @@ class SMC(Module):
         resampled_state = self._resampling_method.apply(state, resampling_flag)
         # perform sequential IS step
         new_state = self.propose_and_weight(resampled_state, observation, inputs)
-
+        new_state = self._resampling_correction_term(resampling_flag, new_state, state, observation, inputs)
         return new_state
+
+    def _resampling_correction_term(self, resampling_flag: tf.Tensor, new_state: State, prior_state: State,
+                                    observation: tf.Tensor, inputs: tf.Tensor):
+        b, n = prior_state.batch_size, prior_state.n_particles
+        uniform_log_weights = tf.zeros([b, n]) - tf.math.log(tf.cast(n, float))
+        baseline_state = self.propose_and_weight(attr.evolve(prior_state,
+                                                             log_weights=uniform_log_weights,
+                                                             weights=tf.exp(uniform_log_weights)),
+                                                 observation,
+                                                 inputs)
+        float_flag = tf.cast(resampling_flag, float)
+        centered_reward = tf.reshape(float_flag * (new_state.log_likelihoods - baseline_state.log_likelihoods), [-1, 1])
+        # centered_reward = tf.reshape(float_flag * new_state.log_likelihoods, [-1, 1])
+        resampling_correction = prior_state.resampling_correction + tf.reduce_mean(
+            tf.stop_gradient(centered_reward) * prior_state.log_weights, 1)
+        return attr.evolve(new_state, resampling_correction=resampling_correction)
 
     def propose_and_weight(self, state: State, observation: tf.Tensor,
                            inputs: tf.Tensor):

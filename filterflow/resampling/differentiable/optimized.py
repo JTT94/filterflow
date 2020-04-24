@@ -11,6 +11,8 @@ from filterflow.resampling.differentiable.optimizer.base import OptimizerBase
 class OptimizedPointCloud(ResamplerBase, metaclass=abc.ABCMeta):
     """Optimized Point Cloud - docstring to come."""
 
+    DIFFERENTIABLE = True
+
     # TODO: Document this really nicely
     def __init__(self, optimizer: OptimizerBase, intermediate_resampler: ResamplerBase, name='OptimizedPointCloud'):
         """Constructor

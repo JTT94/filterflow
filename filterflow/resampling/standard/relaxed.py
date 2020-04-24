@@ -31,7 +31,7 @@ def _blend_tensor(blending_weights, tensor, num_particles, batch_size):
     # blendeding_weights is [batch index, blending weight index, sample index].
     # Multiplying these gives a matrix of size [batch_size, state_size,
     # num_particles].
-    tensor = tf.einsum(''tensor, blending_weights)
+    tensor = tf.einsum('', tensor, blending_weights)
     # transpose the tensor to be [num_particles, batch_size, state_size]
     # and then reshape it to match the original format.
     tensor = tf.reshape(tf.transpose(tensor, perm=[2, 0, 1]),
@@ -45,11 +45,12 @@ class RelaxedResampler(ResamplerBase):
     TODO: put a nice docstring here
     """
 
-    def __init__(self, temperature, on_log=True, stop_gradient=False, name='RelaxedResampler'):
+    DIFFERENTIABLE = False
+
+    def __init__(self, temperature, on_log=True, name='RelaxedResampler'):
         super(RelaxedResampler, self).__init__(name)
         self._temperature = temperature
         self._on_log = on_log
-        self._stop_gradient = stop_gradient
 
     def apply(self, state: State, flags: tf.Tensor):
         """ Resampling method
