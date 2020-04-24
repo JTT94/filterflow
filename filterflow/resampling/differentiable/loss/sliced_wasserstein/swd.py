@@ -39,7 +39,7 @@ def sliced_wasserstein(w_x, w_y, x, y, n_projections, metric):
     tiled_w_y = tf.tile(tf.expand_dims(w_y, 1), [1, n_projections, 1])
 
     emd_res = emd_1d(tiled_w_x, tiled_w_y, projected_x, projected_y, metric)
-    return tf.reduce_mean(emd_res, -1)
+    return tf.reduce_sum(emd_res, -1)
 
 
 class SlicedWassersteinDistance(Loss):

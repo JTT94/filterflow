@@ -11,9 +11,10 @@ def random_projections(batch_size, n_projections, dimension):
     :param dimension: tf.Tensor
         Dimension of the space
     """
-    projections = tf.random.normal([batch_size, n_projections, dimension], 0., 1.)
+    projections = tf.random.stateless_normal([batch_size, n_projections, dimension], [51, 27], 0., 1.)
     projections_norm = tf.math.reduce_euclidean_norm(projections, -1, keepdims=True)
     return projections / projections_norm
+
 
 @tf.function
 def sqeuclidean(x, y):
@@ -49,6 +50,7 @@ def emd_1d(w_x, w_y, x, y, metric):
 
 @tf.function
 def sliced_wasserstein(w_x, w_y, x, y, n_projections, metric):
+    
     b, n, d = x.shape
     _, m, _ = y.shape
 
