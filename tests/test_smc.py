@@ -2,9 +2,6 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-tf.config.set_visible_devices([], 'GPU')
-tf.function = lambda x: x
-
 from filterflow.base import State, StateSeries
 from filterflow.observation.linear import LinearObservationModel
 from filterflow.proposal import BootstrapProposalModel

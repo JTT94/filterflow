@@ -65,7 +65,6 @@ class SMC(Module):
                                                  inputs)
         float_flag = tf.cast(resampling_flag, float)
         centered_reward = tf.reshape(float_flag * (new_state.log_likelihoods - baseline_state.log_likelihoods), [-1, 1])
-        # centered_reward = tf.reshape(float_flag * new_state.log_likelihoods, [-1, 1])
         resampling_correction = prior_state.resampling_correction + tf.reduce_mean(
             tf.stop_gradient(centered_reward) * prior_state.log_weights, 1)
         return attr.evolve(new_state, resampling_correction=resampling_correction)
