@@ -14,7 +14,7 @@ from filterflow.utils import normalize
 class SMC(Module):
     def __init__(self, observation_model: ObservationModelBase, transition_model: TransitionModelBase,
                  proposal_model: ProposalModelBase, resampling_criterion: ResamplingCriterionBase,
-                 resampling_method: ResamplerBase, correct_gradient=False, name='SMC'):
+                 resampling_method: ResamplerBase, name='SMC'):
         super(SMC, self).__init__(name=name)
         self._observation_model = observation_model
         self._transition_model = transition_model

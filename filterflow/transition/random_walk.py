@@ -11,6 +11,19 @@ class RandomWalkModel(TransitionModelBase):
         self._transition_matrix = transition_matrix
         self._noise = noise
 
+    def sample(self, state: State, inputs: tf.Tensor):
+        """Samples a new proposed state conditionally on prior state and some inputs
+        :param state: State
+            State of the filter at t-1
+        :param inputs: tf.Tensor
+            Input for transition model
+        :return: proposed State
+        :rtype: State
+        """
+        pushed_particles = tf.linalg.matvec(self._transition_matrix, state.particles)
+        res = pushed_particles + self._noise.sample([state.batch_size, state.n_particles])
+        return res
+
     def loglikelihood(self, prior_state: State, proposed_state: State, inputs: tf.Tensor):
         """Computes the loglikelihood of an observation given proposed particles
         :param prior_state: State
@@ -25,16 +38,3 @@ class RandomWalkModel(TransitionModelBase):
         pushed_particles = tf.linalg.matvec(self._transition_matrix, prior_state.particles)
         diff = proposed_state.particles - pushed_particles
         return self._noise.log_prob(diff)
-
-    def sample(self, state: State, inputs: tf.Tensor):
-        """Samples a new proposed state conditionally on prior state and some inputs
-        :param state: State
-            State of the filter at t-1
-        :param inputs: tf.Tensor
-            Input for transition model
-        :return: proposed State
-        :rtype: State
-        """
-        pushed_particles = tf.linalg.matvec(self._transition_matrix, state.particles)
-        res = pushed_particles + self._noise.sample([state.batch_size, state.n_particles])
-        return res

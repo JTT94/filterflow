@@ -88,13 +88,14 @@ class State:
         return self.particles.shape[2]
 
     def __attrs_post_init__(self):
-        if self.ancestor_indices is None:
-            ancestor_indices = tf.range(self.n_particles)
-            ancestor_indices = tf.tile(tf.expand_dims(ancestor_indices, 0), [self.batch_size, 1])
-            object.__setattr__(self, 'ancestor_indices', ancestor_indices)
+        if self.particles is not None:
+            if self.ancestor_indices is None:
+                ancestor_indices = tf.range(self.n_particles)
+                ancestor_indices = tf.tile(tf.expand_dims(ancestor_indices, 0), [self.batch_size, 1])
+                object.__setattr__(self, 'ancestor_indices', ancestor_indices)
 
-        if self.resampling_correction is None:
-            object.__setattr__(self, 'resampling_correction', tf.zeros(self.batch_size))
+            if self.resampling_correction is None:
+                object.__setattr__(self, 'resampling_correction', tf.zeros(self.batch_size))
 
 
 @attr.s
