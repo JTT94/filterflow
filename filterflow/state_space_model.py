@@ -35,7 +35,12 @@ class StateSpaceModel(Module):
 
     def init_state(self, state_value):
         dtype = state_value.dtype
-        dim = state_value.shape[0]
+
+        if len(state_value.shape)>0:
+            dim = state_value.shape[0]
+        else:
+            dim = tf.size(state_value).numpy()
+
         initial_particle = tf.reshape(state_value, [1, 1, dim])
 
         # create state object with 1 batch and 1 particle
@@ -62,10 +67,6 @@ class StateSpaceModel(Module):
         # init particle
         initial_state = self.init_state(state_value)
         state = attr.evolve(initial_state)
-        
-        # get observation dim
-        test_obs = self.sample_observation(state)
-        obs_dim = test_obs.shape[2]
         
         # init tensor arrays for recording states and outputs
          # init series
