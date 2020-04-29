@@ -33,7 +33,7 @@ class RegularisedTransform(ResamplerBase, metaclass=abc.ABCMeta):
     """Regularised Transform - docstring to come."""
 
     # TODO: Document this really nicely
-    def __init__(self, epsilon, scaling=0.75, max_iter=50, convergence_threshold=1e-4, name='RegularisedTransform'):
+    def __init__(self, epsilon, scaling=0.75, max_iter=100, convergence_threshold=1e-3, name='RegularisedTransform'):
         """Constructor
 
         :param epsilon: float

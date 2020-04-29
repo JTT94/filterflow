@@ -92,7 +92,7 @@ class SMC(Module):
 
         def body(state, states_series, i):
             observation = data_iterator.get_next()
-            state = self.update(state, observation, tf.constant(0.))
+            state = self.update(state, observation, None)
             states_series = states_series.write(i, state)
             return state, states_series, i + 1
 

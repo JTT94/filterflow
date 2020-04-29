@@ -6,13 +6,15 @@ from filterflow.base import State
 from filterflow.resampling.base import ResamplerBase
 from filterflow.resampling.differentiable.biased import apply_transport_matrix
 from filterflow.resampling.differentiable.regularized_transport.plan import transport
+from filterflow.resampling.differentiable.ricatti.solver import RicattiSolver
 
 
 class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
     """Regularised Transform - docstring to come."""
 
     # TODO: Document this really nicely
-    def __init__(self, epsilon, scaling, max_iter, convergence_threshold, ricatti_solver, name='RegularisedTransform'):
+    def __init__(self, epsilon, scaling=0.75, max_iter=100, convergence_threshold=1e-3, ricatti_solver=None,
+                 propagate_correction_gradient=True, name='RegularisedTransform'):
         """Constructor
 
         :param epsilon: float
@@ -24,12 +26,17 @@ class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
         :param convergence_threshold: float
             Fixed point iterates converge when potentials don't move more than this anymore
         :param ricatti_solver: filterflow.resampling.differentiable.ricatti.solver.RicattiSolver
+        :param propagate_correction_gradient: should you propagate the correction factor gradient
         """
         self.convergence_threshold = tf.cast(convergence_threshold, float)
         self.max_iter = tf.cast(max_iter, tf.dtypes.int32)
         self.epsilon = tf.cast(epsilon, float)
         self.scaling = tf.cast(scaling, float)
-        self.ricatti_solver = ricatti_solver
+        self.propagate_correction_gradient = tf.cast(propagate_correction_gradient, bool)
+        if ricatti_solver is None:
+            self.ricatti_solver = RicattiSolver(tf.constant(0.25), tf.constant(10.), tf.constant(1e-3))
+        else:
+            self.ricatti_solver = ricatti_solver
         super(CorrectedRegularizedTransform, self).__init__(name=name)
 
     def apply(self, state: State, flags: tf.Tensor):
@@ -45,6 +52,8 @@ class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
         # TODO: The real batch_size is the sum of flags. We shouldn't do more operations than we need...
         transport_matrix, _ = transport(state.particles, state.log_weights, self.epsilon, self.scaling,
                                         self.convergence_threshold, self.max_iter, state.n_particles)
-
         transport_correction = self.ricatti_solver(transport_matrix, state.weights)
+        if not self.propagate_correction_gradient:
+            transport_correction = tf.stop_gradient(transport_correction)
+
         return apply_transport_matrix(state, transport_matrix + transport_correction, flags)
