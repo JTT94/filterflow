@@ -1,2 +1,2 @@
 from .biased import RegularisedTransform
-from .corrected import CorrectedRegularizedTransform
+from .corrected import CorrectedRegularizedTransform, PartiallyCorrectedRegularizedTransform
