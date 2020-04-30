@@ -22,6 +22,7 @@ class SMC(Module):
         self._resampling_criterion = resampling_criterion
         self._resampling_method = resampling_method
 
+    @tf.function
     def predict(self, state: State, inputs: tf.Tensor):
         """Predict step of the filter
 
@@ -54,6 +55,7 @@ class SMC(Module):
         new_state = self._resampling_correction_term(resampling_flag, new_state, state, observation, inputs)
         return new_state
 
+    @tf.function
     def _resampling_correction_term(self, resampling_flag: tf.Tensor, new_state: State, prior_state: State,
                                     observation: tf.Tensor, inputs: tf.Tensor):
         b, n = prior_state.batch_size, prior_state.n_particles
@@ -69,6 +71,7 @@ class SMC(Module):
             tf.stop_gradient(centered_reward) * prior_state.log_weights, 1)
         return attr.evolve(new_state, resampling_correction=resampling_correction)
 
+    @tf.function
     def propose_and_weight(self, state: State, observation: tf.Tensor,
                            inputs: tf.Tensor):
         """
@@ -86,6 +89,7 @@ class SMC(Module):
         log_weights = log_weights + self._observation_model.loglikelihood(proposed_state, observation)
         log_weights = log_weights - self._proposal_model.loglikelihood(proposed_state, state, inputs, observation)
         log_weights = log_weights + state.log_weights
+
         log_likelihood_increment = tf.math.reduce_logsumexp(log_weights, 1)
         log_likelihoods = state.log_likelihoods + log_likelihood_increment
         normalized_log_weights = normalize(log_weights, 1, True)
@@ -129,7 +133,7 @@ class SMC(Module):
 
     @tf.function
     def _return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor):
-        final_state, states_series = self._return(initial_state, observation_series, n_observations)
+        final_state, _ = self._return(initial_state, observation_series, n_observations)
         return final_state
 
     @tf.function

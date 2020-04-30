@@ -1,7 +1,7 @@
 import attr
 import tensorflow as tf
 
-from filterflow.base import State, Module, StateSeries
+from filterflow.base import State, Module, DTYPE_TO_STATE_SERIES
 from filterflow.observation.base import ObservationSampler
 from filterflow.transition.base import TransitionModelBase
 
@@ -13,6 +13,7 @@ class StateSpaceModel(Module):
         self._observation_model = observation_model
         self._transition_model = transition_model
 
+    @tf.function
     def sample_state(self, state: State):
         """Apply transition on latent state"
 
@@ -21,8 +22,9 @@ class StateSpaceModel(Module):
         :return: Predicted State
         :rtype: State
         """
-        return self._transition_model.sample(state, None)
+        return self._transition_model.sample(state, tf.constant(0.))
 
+    @tf.function
     def sample_observation(self, state: State):
         """Samples a new observation conditionally on latent state
         :param state: State
@@ -34,7 +36,12 @@ class StateSpaceModel(Module):
 
     def init_state(self, state_value):
         dtype = state_value.dtype
-        dim = state_value.shape[0]
+
+        if len(state_value.shape) > 0:
+            dim = state_value.shape[0]
+        else:
+            dim = tf.size(state_value).numpy()
+
         initial_particle = tf.reshape(state_value, [1, 1, dim])
 
         # create state object with 1 batch and 1 particle
@@ -48,6 +55,7 @@ class StateSpaceModel(Module):
                               resampling_correction=None)
         return initial_state
 
+    @tf.function
     def sample(self, state_value: tf.Tensor, n_steps: int):
         """
         :param state_value: Tensor
@@ -64,26 +72,21 @@ class StateSpaceModel(Module):
         initial_state = self.init_state(state_value)
         state = attr.evolve(initial_state)
 
-        # get observation dim
-        test_obs = self.sample_observation(state)
-        obs_dim = test_obs.shape[2]
+        observations = tf.TensorArray(dtype=dtype, size=n_steps)
+        states = DTYPE_TO_STATE_SERIES[dtype]
 
-        # init tensor arrays for recording states and outputs
-        # init series
-        states = []
-        observations = []
         # forward loop
-        for t in range(n_steps):
+        for t in tf.range(n_steps):
             state_particle = self.sample_state(state)
             state = attr.evolve(state, particles=state_particle)
             observation = self.sample_observation(state)
 
-            observations.append(observation)
-            states.append(state)
+            observations = observations.write(t, observation)
+            states = states.write(t, state)
 
-        return states, observations
+        return states.stack(), observations.stack()
 
+    @tf.function
     def __call__(self, state_value: tf.Tensor, n_steps: int):
         states, observations = self.sample(state_value, n_steps)
-
         return states, observations
