@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 from filterflow.resampling.differentiable.loss.base import Loss
-from filterflow.resampling.differentiable.loss.sliced_wasserstein.utils import random_projections  #
+from filterflow.resampling.differentiable.loss.sliced_wasserstein.utils import random_projections
 
 
 @tf.function
@@ -17,12 +17,11 @@ def emd_1d(w_x, w_y, x, y, metric):
     sorted_weights = tf.gather(all_weights, all_values_index, batch_dims=n_batch_dim)
     sorted_mask = tf.gather(factor, all_values_index, batch_dims=n_batch_dim)
 
-    cdf_y = tf.math.cumsum(sorted_mask * sorted_weights, -1)[..., :-1]
-    cdf_x = tf.math.cumsum((1. - sorted_mask) * sorted_weights, -1)[..., :-1]
+    cdf_y = tf.math.cumsum(sorted_mask * sorted_weights, -1)
+    cdf_x = tf.math.cumsum((1. - sorted_mask) * sorted_weights, -1)
 
     delta = sorted_values[..., 1:] - sorted_values[..., :-1]
-    integrand = metric(cdf_y, cdf_x) * delta
-
+    integrand = metric(cdf_y[..., :-1], cdf_x[..., :-1]) * delta
     return tf.reduce_sum(integrand, -1)
 
 

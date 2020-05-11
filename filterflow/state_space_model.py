@@ -1,7 +1,7 @@
 import attr
 import tensorflow as tf
 
-from filterflow.base import State, Module, DTYPE_TO_STATE_SERIES
+from filterflow.base import State, Module
 from filterflow.observation.base import ObservationSampler
 from filterflow.transition.base import TransitionModelBase
 
@@ -73,7 +73,7 @@ class StateSpaceModel(Module):
         state = attr.evolve(initial_state)
 
         observations = tf.TensorArray(dtype=dtype, size=n_steps)
-        states = DTYPE_TO_STATE_SERIES[dtype]
+        states = tf.TensorArray(dtype=dtype, size=n_steps)
 
         # forward loop
         for t in tf.range(n_steps):
@@ -82,7 +82,7 @@ class StateSpaceModel(Module):
             observation = self.sample_observation(state)
 
             observations = observations.write(t, observation)
-            states = states.write(t, state)
+            states = states.write(t, state_particle)
 
         return states.stack(), observations.stack()
 

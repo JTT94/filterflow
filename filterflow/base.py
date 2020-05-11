@@ -23,25 +23,6 @@ class Module(tf.Module, metaclass=abc.ABCMeta):
         pass
 
 
-@attr.s(frozen=True)
-class DataSeries(metaclass=abc.ABCMeta):
-    @abc.abstractmethod
-    def write(self, t, data_point):
-        """Inferface method"""
-
-    @abc.abstractmethod
-    def read(self, t):
-        """Inferface method"""
-
-    @abc.abstractmethod
-    def stack(self):
-        """Inferface method"""
-
-    @abc.abstractmethod
-    def size(self):
-        """Interface method"""
-
-
 def _non_scalar_validator(_instance, attribute, value, ndim=None):
     if ndim is None or value is None or isinstance(value, tf.DType):
         return
@@ -72,8 +53,8 @@ class State:
     log_weights = attr.ib(validator=_dim_2_validator)
     weights = attr.ib(validator=_dim_2_validator)
     log_likelihoods = attr.ib(validator=_dim_1_validator)
-    ancestor_indices = attr.ib(validator=attr.validators.optional(_dim_2_validator))
-    resampling_correction = attr.ib(validator=attr.validators.optional(_dim_1_validator))
+    ancestor_indices = attr.ib(validator=attr.validators.optional(_dim_2_validator), default=None)
+    resampling_correction = attr.ib(validator=attr.validators.optional(_dim_1_validator), default=None)
 
     @property
     def batch_size(self):
@@ -101,13 +82,18 @@ class State:
 @attr.s
 class StateWithMemory(State):
     ADDITIONAL_STATE_VARIABLES = ('rnn_state',)
-    rnn_state = attr.ib(validator=_dim_3_validator)
-    ancestor_indices = attr.ib(validator=attr.validators.optional(_dim_2_validator),
-                               default=None)
+    rnn_state = attr.ib(validator=_dim_3_validator, default=None)
+
+    def __attrs_post_init__(self):
+        super(StateWithMemory, self).__attrs_post_init__()
+        if self.particles is not None:
+            if self.rnn_state is None:
+                rnn_state = tf.zeros([self.batch_size, self.n_particles, self.dimension])
+                object.__setattr__(self, 'rnn_state', rnn_state)
 
 
 @attr.s(frozen=True)
-class StateSeries(DataSeries, metaclass=abc.ABCMeta):
+class StateSeries:
     batch_size = attr.ib()
     n_particles = attr.ib()
     dimension = attr.ib()
@@ -201,81 +187,80 @@ class DoubleStateSeries(StateSeries):
 
 DTYPE_TO_STATE_SERIES = {klass.DTYPE: klass for klass in StateSeries.__subclasses__()}
 
-
-@attr.s(frozen=True)
-class Observation:
-    observation = attr.ib(validator=_non_scalar_validator)
-
-    @property
-    def shape(self):
-        return self.observation.shape
-
-    def __attrs_post_init__(self):
-        if isinstance(self.observation, Observation):
-            self.observation = self.observation.observation
-
-
-@attr.s(frozen=True)
-class ObservationSeries(DataSeries, metaclass=abc.ABCMeta):
-    DTYPE = None
-
-    shape = attr.ib()
-    _observation = attr.ib(default=None)
-
-    @property
-    def observation(self):
-        return self._observation
-
-    def __attrs_post_init__(self):
-        if self._observation is None:
-            ta = tf.TensorArray(self.DTYPE,
-                                size=0,
-                                dynamic_size=True,
-                                clear_after_read=False,
-                                tensor_array_name='ObservationSeries',
-                                element_shape=tf.TensorShape(self.shape))
-            object.__setattr__(self, '_observation', ta)
-
-    def write(self, t, observation):
-        observation = self._observation.write(t, tf.reshape(observation, self.shape))
-        return attr.evolve(self, observation=observation)
-
-    def stack(self):
-        observations = self._observation.stack()
-        observations_dataset = tf.data.Dataset.from_tensor_slices(observations)
-        return observations_dataset.map(Observation)
-
-    def read(self, t):
-        if isinstance(self._observation, tf.TensorArray):
-            observation = self._observation.read(t)
-        else:
-            observation = self._observation[t]
-        if isinstance(observation, Observation):
-            return observation
-        return Observation(observation)
-
-    def size(self):
-        if isinstance(self._observation, tf.TensorArray):
-            return self._observation.size()
-        else:
-            return self._observation.shape[0]
-
-
-@attr.s(frozen=True)
-class FloatObservationSeries(ObservationSeries):
-    DTYPE = tf.dtypes.float32
+# @attr.s(frozen=True)
+# class Observation:
+#     observation = attr.ib(validator=_non_scalar_validator)
+#
+#     @property
+#     def shape(self):
+#         return self.observation.shape
+#
+#     def __attrs_post_init__(self):
+#         if isinstance(self.observation, Observation):
+#             self.observation = self.observation.observation
+#
+#
+# @attr.s(frozen=True)
+# class ObservationSeries(DataSeries, metaclass=abc.ABCMeta):
+#     DTYPE = None
+#
+#     shape = attr.ib()
+#     _observation = attr.ib(default=None)
+#
+#     @property
+#     def observation(self):
+#         return self._observation
+#
+#     def __attrs_post_init__(self):
+#         if self._observation is None:
+#             ta = tf.TensorArray(self.DTYPE,
+#                                 size=0,
+#                                 dynamic_size=True,
+#                                 clear_after_read=False,
+#                                 tensor_array_name='ObservationSeries',
+#                                 element_shape=tf.TensorShape(self.shape))
+#             object.__setattr__(self, '_observation', ta)
+#
+#     def write(self, t, observation):
+#         observation = self._observation.write(t, tf.reshape(observation, self.shape))
+#         return attr.evolve(self, observation=observation)
+#
+#     def stack(self):
+#         observations = self._observation.stack()
+#         observations_dataset = tf.data.Dataset.from_tensor_slices(observations)
+#         return observations_dataset.map(Observation)
+#
+#     def read(self, t):
+#         if isinstance(self._observation, tf.TensorArray):
+#             observation = self._observation.read(t)
+#         else:
+#             observation = self._observation[t]
+#         if isinstance(observation, Observation):
+#             return observation
+#         return Observation(observation)
+#
+#     def size(self):
+#         if isinstance(self._observation, tf.TensorArray):
+#             return self._observation.size()
+#         else:
+#             return self._observation.shape[0]
 
 
-@attr.s(frozen=True)
-class DoubleObservationSeries(ObservationSeries):
-    DTYPE = tf.dtypes.float64
-
-
-DTYPE_TO_OBSERVATION_SERIES = {klass.DTYPE: klass for klass in ObservationSeries.__subclasses__()}
+# @attr.s(frozen=True)
+# class FloatObservationSeries(ObservationSeries):
+#     DTYPE = tf.dtypes.float32
+#
+#
+# @attr.s(frozen=True)
+# class DoubleObservationSeries(ObservationSeries):
+#     DTYPE = tf.dtypes.float64
+#
+#
+# DTYPE_TO_OBSERVATION_SERIES = {klass.DTYPE: klass for klass in ObservationSeries.__subclasses__()}
 
 
 # TODO : Have a think about what inputs we want exactly - e.g. use a dynamic classifier example to see what we need
-@attr.s
-class InputsBase(metaclass=abc.ABCMeta):
-    """Container interface to implement an arbitrary collection of inputs to give to the filter at time of prediction
-    """
+# @attr.s
+# class InputsBase(metaclass=abc.ABCMeta):
+#     """Container interface to implement an arbitrary collection of inputs to give to the filter at time of prediction
+#     """

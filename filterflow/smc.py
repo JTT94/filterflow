@@ -123,7 +123,8 @@ class SMC(Module):
             return i < n_observations
 
         i0 = tf.constant(0)
-        final_state, states, _ = tf.while_loop(cond, body, [initial_state, states_series, i0], )
+        final_state, states_series, _ = tf.while_loop(cond, body, [initial_state, states_series, i0], )
+
         return final_state, states_series.stack()
 
     @tf.function
