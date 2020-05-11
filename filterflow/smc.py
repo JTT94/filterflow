@@ -118,7 +118,7 @@ class SMC(Module):
             observation = data_iterator.get_next()
             inputs = inputs_iterator.get_next()
             state = self.update(state, observation, inputs)
-            states_series = states.write(i, state)
+            states = states.write(i, state)
             return state, states, i + 1
 
         def cond(_state, _states, i):
@@ -150,7 +150,7 @@ class SMC(Module):
         :return: tensor array of states
         """
         if inputs_series is None:
-            inputs_series =
+            inputs_series = tf.data.Dataset.range(n_observations)
         if return_final:
             return self._return_final_loop(initial_state, observation_series, n_observations, inputs_series)
         else:
