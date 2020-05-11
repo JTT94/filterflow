@@ -92,16 +92,16 @@ class SMC(Module):
 
         log_likelihood_increment = tf.math.reduce_logsumexp(log_weights, 1)
         log_likelihoods = state.log_likelihoods + log_likelihood_increment
+        log_weights = tf.clip_by_value(log_weights,
+                                       MIN_RELATIVE_LOG_WEIGHT * float_n_particles,
+                                       tf.constant(float('inf')))
         normalized_log_weights = normalize(log_weights, 1, True)
-        normalized_log_weights = tf.clip_by_value(normalized_log_weights,
-                                                  MIN_RELATIVE_LOG_WEIGHT * float_n_particles,
-                                                  tf.constant(float('inf')))
-        normalized_log_weights = normalize(normalized_log_weights, 1, True)
         return attr.evolve(proposed_state, weights=tf.math.exp(normalized_log_weights),
                            log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)
 
     @tf.function
-    def _return(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor):
+    def _return(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor,
+                inputs_series: tf.data.Dataset):
         # infer dtype
         dtype = initial_state.particles.dtype
 
@@ -112,11 +112,13 @@ class SMC(Module):
                                          dimension=initial_state.dimension)
 
         data_iterator = iter(observation_series)
+        inputs_iterator = iter(inputs_series)
 
         def body(state, states, i):
             observation = data_iterator.get_next()
-            state = self.update(state, observation, tf.constant(0.))
-            states = states.write(i, state)
+            inputs = inputs_iterator.get_next()
+            state = self.update(state, observation, inputs)
+            states_series = states.write(i, state)
             return state, states, i + 1
 
         def cond(_state, _states, i):
@@ -128,18 +130,18 @@ class SMC(Module):
         return final_state, states_series.stack()
 
     @tf.function
-    def _return_all_loop(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor):
-        _, states_series = self._return(initial_state, observation_series, n_observations)
+    def _return_all_loop(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor, inputs_series: tf.data.Dataset):
+        _, states_series = self._return(initial_state, observation_series, n_observations, inputs_series)
         return states_series
 
     @tf.function
-    def _return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor):
-        final_state, _ = self._return(initial_state, observation_series, n_observations)
+    def _return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor, inputs_series: tf.data.Dataset):
+        final_state, _ = self._return(initial_state, observation_series, n_observations, inputs_series)
         return final_state
 
     @tf.function
     def __call__(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor,
-                 return_final=False):
+                 inputs_series: tf.data.Dataset = None, return_final=False):
         """
         :param initial_state: State
             initial state of the filter
@@ -147,7 +149,9 @@ class SMC(Module):
             sequence of observation objects
         :return: tensor array of states
         """
+        if inputs_series is None:
+            inputs_series =
         if return_final:
-            return self._return_final_loop(initial_state, observation_series, n_observations)
+            return self._return_final_loop(initial_state, observation_series, n_observations, inputs_series)
         else:
-            return self._return_all_loop(initial_state, observation_series, n_observations)
+            return self._return_all_loop(initial_state, observation_series, n_observations, inputs_series)
