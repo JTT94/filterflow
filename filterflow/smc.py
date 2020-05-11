@@ -78,7 +78,7 @@ class SMC(Module):
                            log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)
 
     @tf.function
-    def _return(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor):
+    def _return(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor, inputs_series: tf.data.Dataset):
         # infer dtype
         dtype = initial_state.particles.dtype
 
@@ -89,10 +89,12 @@ class SMC(Module):
                                          dimension=initial_state.dimension)
 
         data_iterator = iter(observation_series)
+        inputs_iterator = iter(inputs_series)
 
         def body(state, states_series, i):
             observation = data_iterator.get_next()
-            state = self.update(state, observation, None)
+            inputs = inputs_iterator.get_next()
+            state = self.update(state, observation, inputs)
             states_series = states_series.write(i, state)
             return state, states_series, i + 1
 
@@ -104,16 +106,16 @@ class SMC(Module):
         return final_state, states_series.stack()
 
     @tf.function
-    def _return_all_loop(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor):
-        _, states_series = self._return(initial_state, observation_series, n_observations)
+    def _return_all_loop(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor, inputs_series: tf.data.Dataset):
+        _, states_series = self._return(initial_state, observation_series, n_observations, inputs_series)
         return states_series
 
     @tf.function
-    def _return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor):
-        final_state, _ = self._return(initial_state, observation_series, n_observations)
+    def _return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor, inputs_series: tf.data.Dataset):
+        final_state, _ = self._return(initial_state, observation_series, n_observations, inputs_series)
         return final_state
 
-    def __call__(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor,
+    def __call__(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor, inputs_series: tf.data.Dataset,
                  return_final=False):
         """
         :param initial_state: State
@@ -123,6 +125,6 @@ class SMC(Module):
         :return: tensor array of states
         """
         if return_final:
-            return self._return_final_loop(initial_state, observation_series, n_observations)
+            return self._return_final_loop(initial_state, observation_series, n_observations, inputs_series)
         else:
-            return self._return_all_loop(initial_state, observation_series, n_observations)
+            return self._return_all_loop(initial_state, observation_series, n_observations, inputs_series)
