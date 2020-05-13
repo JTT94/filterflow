@@ -54,8 +54,10 @@ class TestSMC(tf.test.TestCase):
         self.observation_dataset = tf.data.Dataset.from_tensor_slices(observations)
 
     def test_call(self):
-        final_state = self.bootstrap_filter(self.initial_state, self.observation_dataset, tf.constant(self.n), True)
+        final_state = self.bootstrap_filter(self.initial_state, self.observation_dataset, self.n,
+                                            return_final=True)
         self.assertIsInstance(final_state, State)
 
-        all_states = self.bootstrap_filter(self.initial_state, self.observation_dataset, tf.constant(self.n), False)
+        all_states = self.bootstrap_filter(self.initial_state, self.observation_dataset, self.n,
+                                           return_final=False)
         self.assertIsInstance(all_states, StateSeries)

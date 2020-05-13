@@ -1,12 +1,22 @@
 import tensorflow as tf
 
+from filterflow.constants import MIN_RELATIVE_LOG_WEIGHT, MIN_ABSOLUTE_LOG_WEIGHT, MIN_RELATIVE_WEIGHT, \
+    MIN_ABSOLUTE_WEIGHT
+
 
 @tf.function
-def normalize(weights, axis, log=True):
+def normalize(weights, axis, n, log=True):
     """Normalises weights, either expressed in log terms or in their natural space"""
+    float_n = tf.cast(n, float)
     if log:
-        return weights - tf.reduce_logsumexp(weights, axis=axis, keepdims=True)
-    return weights / tf.reduce_sum(weights, axis=axis)
+        clip_min = tf.maximum(MIN_ABSOLUTE_LOG_WEIGHT, tf.math.log(float_n) * MIN_RELATIVE_LOG_WEIGHT)
+        clipped_weights = tf.maximum(weights, clip_min)
+        normalizer = tf.reduce_logsumexp(clipped_weights, axis=axis, keepdims=True)
+        return clipped_weights - normalizer
+    clip_min = tf.maximum(MIN_ABSOLUTE_WEIGHT, float_n * MIN_RELATIVE_WEIGHT)
+    clipped_weights = tf.maximum(clip_min, weights)
+    normalizer = tf.reduce_sum(clipped_weights, axis=axis)
+    return clipped_weights / normalizer
 
 
 @tf.function
