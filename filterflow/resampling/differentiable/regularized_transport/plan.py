@@ -1,6 +1,5 @@
 import tensorflow as tf
 
-from filterflow.constants import MIN_RELATIVE_LOG_WEIGHT
 from filterflow.resampling.differentiable.regularized_transport.sinkhorn import sinkhorn_potentials
 from filterflow.resampling.differentiable.regularized_transport.utils import cost
 
@@ -64,19 +63,19 @@ def transport(x, logw, eps, scaling, threshold, max_iter, n):
     :rtype tf.Tensor[B, N, N]
     """
     float_n = tf.cast(n, float)
-
-    uniform_log_weight = -tf.math.log(float_n) * tf.ones_like(logw)
+    log_n = tf.math.log(float_n)
+    uniform_log_weight = -log_n * tf.ones_like(logw)
 
     alpha, beta, _, _, _ = sinkhorn_potentials(logw, x, uniform_log_weight, x, eps, scaling, threshold,
                                                               max_iter)
     transport_matrix = transport_from_potentials(x, alpha, beta, eps, logw, float_n)
 
     def grad(d_transport):
-        d_transport = tf.clip_by_value(d_transport, -1., 1.)
-        mask = logw > MIN_RELATIVE_LOG_WEIGHT * tf.math.log(float_n)  # the other particles have died out really.
+        d_transport = tf.clip_by_value(d_transport, -log_n, log_n)
+        # mask = logw > MIN_RELATIVE_LOG_WEIGHT * tf.math.log(float_n)  # the other particles have died out really.
         dx, dlogw = tf.gradients(transport_matrix, [x, logw], d_transport)
-        dlogw = tf.where(mask, dlogw, 0.)
-        dx = tf.where(tf.expand_dims(mask, -1), dx, 0.)  # set all dimensions of the same particle to 0.
+        # dlogw = tf.where(mask, dlogw, 0.)
+        # dx = tf.where(tf.expand_dims(mask, -1), dx, 0.)  # set all dimensions of the same particle to 0.
         return dx, dlogw, None, None, None, None, None
 
     return transport_matrix, grad
