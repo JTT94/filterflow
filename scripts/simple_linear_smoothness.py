@@ -6,6 +6,8 @@ import numpy as np
 import pykalman
 import seaborn
 import tensorflow as tf
+import tqdm
+from mpl_toolkits import mplot3d
 
 from filterflow.base import State
 from filterflow.models.simple_linear_gaussian import make_filter
@@ -15,6 +17,8 @@ from filterflow.resampling.differentiable import PartiallyCorrectedRegularizedTr
 from filterflow.resampling.differentiable.loss import SinkhornLoss
 from filterflow.resampling.differentiable.optimized import OptimizedPointCloud
 from filterflow.resampling.differentiable.optimizer.sgd import SGD
+
+_ = mplot3d  # Importing this monkey patches matplotlib to allow for 3D plots
 
 
 def get_data(transition_matrix, observation_matrix, transition_covariance, observation_covariance, T=100,
@@ -54,7 +58,7 @@ def get_surface(mesh, modifiable_transition_matrix, pf, initial_state, use_corre
                 seed):
     likelihoods = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[])
     gradients = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[2])
-    for i, val in mesh:
+    for i, val in enumerate(tqdm.tqdm(mesh)):
         tf_val = tf.constant(val)
         transition_matrix = tf.linalg.diag(tf_val)
         assign_op = modifiable_transition_matrix.assign(transition_matrix)
@@ -69,11 +73,12 @@ def get_surface(mesh, modifiable_transition_matrix, pf, initial_state, use_corre
     return likelihoods.stack(), gradients.stack()
 
 
+# DO NOT DECORATE
 def get_surface_finite_difference(mesh, modifiable_transition_matrix, pf, initial_state, use_correction_term,
                                   observations_dataset, T, seed, epsilon=1e-3):
     likelihoods = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[])
     gradients = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[2])
-    for i, val in mesh:
+    for i, val in enumerate(tqdm.tqdm(mesh)):
 
         tf_val = tf.constant(val)
         transition_matrix = tf.linalg.diag(tf_val)
@@ -85,7 +90,8 @@ def get_surface_finite_difference(mesh, modifiable_transition_matrix, pf, initia
 
         ll_eps_list = []
         for n_val in range(mesh.shape[1]):
-            tf_val_eps = tf.constant([val[k] + (epsilon if k == n_val else 0.) for k in range(mesh.shape[1])])
+            tf_val_eps = tf.constant([val[k] + (epsilon if k == n_val else 0.) for k in range(mesh.shape[1])],
+                                     dtype=tf.float32)
             transition_matrix = tf.linalg.diag(tf_val_eps)
             assign_op = modifiable_transition_matrix.assign(transition_matrix)
             with tf.control_dependencies([assign_op]):
@@ -204,9 +210,9 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
                                                                    initial_state, False, observation_dataset, T,
                                                                    filter_seed)
 
-    plot_surface(mesh, mesh_size, log_likelihoods, resampling_method_enum.name, savefig)
-    plot_vector_field(mesh, mesh_size, log_likelihoods, gradients, resampling_method_enum.name, savefig)
+    plot_surface(mesh, mesh_size, log_likelihoods.numpy(), resampling_method_enum.name, savefig)
+    plot_vector_field(mesh, mesh_size, log_likelihoods.numpy(), gradients.numpy(), resampling_method_enum.name, savefig)
 
 
 if __name__ == '__main__':
-    main(ResamplingMethodsEnum.MULTINOMIAL, 0.5, T=25)
+    main(ResamplingMethodsEnum.MULTINOMIAL, 0.5, T=25, mesh_size=2)

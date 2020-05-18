@@ -9,7 +9,7 @@ from filterflow.transition.random_walk import RandomWalkModel
 
 def make_filter(observation_matrix, transition_matrix, observation_error_chol, transition_noise_chol, resampling_method,
                 resampling_criterion, observation_error_bias=None, transition_noise_bias=None):
-    dy, dx = observation_matrix
+    dy, dx = observation_matrix.shape
 
     if observation_error_bias is None:
         observation_error_bias = tf.zeros(dy)
