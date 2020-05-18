@@ -71,7 +71,7 @@ def transport(x, logw, eps, scaling, threshold, max_iter, n):
     transport_matrix = transport_from_potentials(x, alpha, beta, eps, logw, float_n)
 
     def grad(d_transport):
-        d_transport = tf.clip_by_value(d_transport, -log_n, log_n)
+        d_transport = tf.clip_by_value(d_transport, -1., 1.)
         # mask = logw > MIN_RELATIVE_LOG_WEIGHT * tf.math.log(float_n)  # the other particles have died out really.
         dx, dlogw = tf.gradients(transport_matrix, [x, logw], d_transport)
         # dlogw = tf.where(mask, dlogw, 0.)
