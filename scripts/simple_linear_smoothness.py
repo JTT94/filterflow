@@ -9,6 +9,10 @@ import tensorflow as tf
 import tqdm
 from mpl_toolkits import mplot3d
 
+
+import sys
+
+sys.path.append("../")
 from filterflow.base import State
 from filterflow.models.simple_linear_gaussian import make_filter
 from filterflow.resampling import MultinomialResampler, SystematicResampler, StratifiedResampler, RegularisedTransform
@@ -141,7 +145,7 @@ def plot_vector_field(mesh, mesh_size, data, grad_data, filename, savefig):
 
 
 def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100, batch_size=1, n_particles=25,
-         data_seed=0, filter_seed=1, mesh_size=10, savefig=False):
+         data_seed=0, filter_seed=1, mesh_size=10, savefig=True):
     transition_matrix = 0.5 * np.eye(2, dtype=np.float32)
     transition_covariance = np.eye(2, dtype=np.float32)
     observation_matrix = np.eye(2, dtype=np.float32)
