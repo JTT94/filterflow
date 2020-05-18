@@ -50,9 +50,9 @@ class State:
     ADDITIONAL_STATE_VARIABLES = ()
 
     particles = attr.ib(validator=_dim_3_validator)
-    log_weights = attr.ib(validator=_dim_2_validator)
-    weights = attr.ib(validator=_dim_2_validator)
-    log_likelihoods = attr.ib(validator=_dim_1_validator)
+    log_weights = attr.ib(validator=_dim_2_validator, default=None)
+    weights = attr.ib(validator=_dim_2_validator, default=None)
+    log_likelihoods = attr.ib(validator=_dim_1_validator, default=None)
     ancestor_indices = attr.ib(validator=attr.validators.optional(_dim_2_validator), default=None)
     resampling_correction = attr.ib(validator=attr.validators.optional(_dim_1_validator), default=None)
 
@@ -70,6 +70,17 @@ class State:
 
     def __attrs_post_init__(self):
         if self.particles is not None:
+            if self.log_weights is None:
+                float_n = tf.cast(self.n_particles, float)
+                log_weights = tf.zeros([self.batch_size, self.n_particles]) - tf.math.log(float_n)
+                object.__setattr__(self, 'log_weights', log_weights)
+
+            if self.weights is None:
+                object.__setattr__(self, 'weights', tf.exp(self.log_weights))
+
+            if self.log_likelihoods is None:
+                object.__setattr__(self, 'log_likelihoods', tf.zeros([self.batch_size]))
+
             if self.ancestor_indices is None:
                 ancestor_indices = tf.range(self.n_particles)
                 ancestor_indices = tf.tile(tf.expand_dims(ancestor_indices, 0), [self.batch_size, 1])
