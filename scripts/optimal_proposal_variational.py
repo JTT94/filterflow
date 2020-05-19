@@ -86,15 +86,20 @@ def get_gradient_descent_function():
     # This is a trick because tensorflow doesn't allow you to create variables inside a decorated function
 
     @tf.function
-    def gradient_descent(pf, initial_state, observations_dataset, T, n_iter, optimizer, mu_ts, beta_ts, log_sigma_ts):
+    def gradient_descent(pf, initial_state, observations_dataset, T, n_iter, optimizer, mu_ts, beta_ts, log_sigma_ts,
+                         initial_values):
+        variables = [mu_ts, beta_ts, log_sigma_ts]
+        reset_operations = [k.assign(v) for k, v in zip(variables, initial_values)]
         loss = tf.TensorArray(dtype=tf.float32, size=n_iter + 1, dynamic_size=False)
-        for i in tf.range(n_iter):
-            loss_value, grads = routine(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts)
-            loss = loss.write(tf.cast(i, tf.int32), loss_value)
-            optimizer.apply_gradients(zip(grads, [mu_ts, beta_ts, log_sigma_ts]))
+
+        with tf.control_dependencies(reset_operations):
+            for i in tf.range(n_iter):
+                loss_value, grads = routine(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts)
+                loss = loss.write(tf.cast(i, tf.int32), loss_value)
+                optimizer.apply_gradients(zip(grads, variables))
         final_log_likelihood = run_smc(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts)
         loss = loss.write(tf.cast(n_iter, tf.int32), -final_log_likelihood)
-        return [tf.convert_to_tensor(var) for var in (mu_ts, beta_ts, log_sigma_ts)], loss.stack()
+        return [tf.convert_to_tensor(var) for var in variables], loss.stack()
 
     return gradient_descent
 
@@ -102,21 +107,19 @@ def get_gradient_descent_function():
 def compare_learning_rates(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts, initial_values,
                            n_iter, optimizer_maker, learning_rates):
     loss_profiles = []
-    gradient_variables = mu_ts, beta_ts, log_sigma_ts
-    reset_ops = [k.assign(v) for k, v in zip(gradient_variables, initial_values)]
     for learning_rate in tqdm(learning_rates):
         optimizer = optimizer_maker(learning_rate=learning_rate)
         gradient_descent_function = get_gradient_descent_function()
-        with tf.control_dependencies([reset_ops]):
-            final_variables, loss_profile = gradient_descent_function(pf, initial_state, observations_dataset, T,
-                                                                      n_iter, optimizer, mu_ts, beta_ts, log_sigma_ts)
+        final_variables, loss_profile = gradient_descent_function(pf, initial_state, observations_dataset, T, n_iter,
+                                                                  optimizer, mu_ts, beta_ts, log_sigma_ts,
+                                                                  initial_values)
         loss_profiles.append(loss_profile.numpy())
     return loss_profiles
 
 
 def plot_losses(loss_profiles_df, filename, savefig):
     fig, ax = plt.subplots(figsize=(5, 5))
-    loss_profiles_df.plot(ax=ax)
+    loss_profiles_df.plot(ax=ax, legend=False)
     fig.tight_layout()
     if savefig:
         fig.savefig(os.path.join('./charts/', f'variational_different_lr_loss_{filename}.png'))
@@ -202,13 +205,12 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
 
     mu_ts = tf.Variable(mu_ts_init, trainable=True)
     beta_ts = tf.Variable(beta_ts_init, trainable=True)
-
     log_sigma_ts = tf.Variable(log_sigma_ts_init, trainable=True)
 
     def optimizer_maker(learning_rate):
         # tf.function doesn't like creating variables. This is a way to create them outside the graph
         # We can't reuse the same optimizer because it would be giving a warmed-up momentum to the ones run later
-        optimizer = tf.optimizers.Adam(learning_rate=learning_rate)
+        optimizer = tf.optimizers.SGD(learning_rate=learning_rate)
         return optimizer
 
     initial_values = [mu_ts_init, beta_ts_init, log_sigma_ts_init]
@@ -223,7 +225,6 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
 
 
 if __name__ == '__main__':
-    learning_rates = np.logspace(-5, -1, 5, base=10).astype(np.float32)
-    main(ResamplingMethodsEnum.MULTINOMIAL, 0.5, T=100, n_particles=10, batch_size=100, learning_rates=learning_rates,
-         n_iter=500,
-         resampling_kwargs=dict(epsilon=0.5, scaling=0.75, convergence_threshold=1e-1))
+    learning_rates = np.logspace(-4., -2., 5, base=10).astype(np.float32)
+    main(ResamplingMethodsEnum.REGULARIZED, 0.5, T=20, n_particles=4, batch_size=4, learning_rates=learning_rates,
+         n_iter=250, resampling_kwargs=dict(epsilon=0.5, scaling=0.75, convergence_threshold=1e-2))
