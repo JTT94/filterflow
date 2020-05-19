@@ -4,15 +4,9 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pykalman
-import seaborn
 import tensorflow as tf
 import tqdm
-from mpl_toolkits import mplot3d
 
-
-import sys
-
-sys.path.append("../")
 from filterflow.base import State
 from filterflow.models.simple_linear_gaussian import make_filter
 from filterflow.resampling import MultinomialResampler, SystematicResampler, StratifiedResampler, RegularisedTransform
@@ -21,8 +15,6 @@ from filterflow.resampling.differentiable import PartiallyCorrectedRegularizedTr
 from filterflow.resampling.differentiable.loss import SinkhornLoss
 from filterflow.resampling.differentiable.optimized import OptimizedPointCloud
 from filterflow.resampling.differentiable.optimizer.sgd import SGD
-
-_ = mplot3d  # Importing this monkey patches matplotlib to allow for 3D plots
 
 
 def get_data(transition_matrix, observation_matrix, transition_covariance, observation_covariance, T=100,
@@ -58,94 +50,71 @@ def routine(pf, initial_state, resampling_correction, observations_dataset, T, g
 
 
 # DO NOT DECORATE
-def get_surface(mesh, modifiable_transition_matrix, pf, initial_state, use_correction_term, observations_dataset, T,
-                seed):
-    likelihoods = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[])
-    gradients = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[2])
-    for i, val in enumerate(tqdm.tqdm(mesh)):
-        tf_val = tf.constant(val)
-        transition_matrix = tf.linalg.diag(tf_val)
-        assign_op = modifiable_transition_matrix.assign(transition_matrix)
-        with tf.control_dependencies([assign_op]):
-            tf.random.set_seed(seed)
-            # sadly this can only be done in eager mode for the time being
-            # (will be corrected with stateless operations in next tf versions)
-            ll, ll_grad = routine(pf, initial_state, use_correction_term, observations_dataset, T,
-                                  modifiable_transition_matrix)
-        likelihoods = likelihoods.write(tf.cast(i, tf.int32), ll)
-        gradients = gradients.write(tf.cast(i, tf.int32), tf.linalg.diag_part(ll_grad))
-    return likelihoods.stack(), gradients.stack()
+def values_and_gradient(x, modifiable_transition_matrix, pf, initial_state,
+                        observations_dataset, T, seed):
+    tf_val = tf.convert_to_tensor(x)
+    transition_matrix = tf.linalg.diag(tf_val)
+    assign_op = modifiable_transition_matrix.assign(transition_matrix)
+    with tf.control_dependencies([assign_op]):
+        tf.random.set_seed(seed)
+        # sadly this can only be done in eager mode for the time being
+        # (will be corrected with stateless operations in next tf versions)
+        ll, ll_grad = routine(pf, initial_state, False, observations_dataset, T,
+                              modifiable_transition_matrix)
+    return -ll, -tf.linalg.diag_part(ll_grad)
 
 
 # DO NOT DECORATE
-def get_surface_finite_difference(mesh, modifiable_transition_matrix, pf, initial_state, use_correction_term,
-                                  observations_dataset, T, seed, epsilon=1e-3):
-    likelihoods = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[])
-    gradients = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[2])
-    for i, val in enumerate(tqdm.tqdm(mesh)):
+def values_and_gradient_finite_diff(x, modifiable_transition_matrix, pf, initial_state, observations_dataset, T, seed,
+                                    epsilon=1e-3):
+    tf_val = tf.convert_to_tensor(x)
+    transition_matrix = tf.linalg.diag(tf_val)
+    assign_op = modifiable_transition_matrix.assign(transition_matrix)
+    with tf.control_dependencies([assign_op]):
+        tf.random.set_seed(seed)
+        ll, _ = routine(pf, initial_state, False, observations_dataset, T, modifiable_transition_matrix)
 
-        tf_val = tf.constant(val)
-        transition_matrix = tf.linalg.diag(tf_val)
+    ll_eps_list = []
+    for n_val in range(len(x)):
+        tf_val_eps = tf.tensor_scatter_nd_add(tf_val, [[n_val]], [epsilon])
+        transition_matrix = tf.linalg.diag(tf_val_eps)
         assign_op = modifiable_transition_matrix.assign(transition_matrix)
         with tf.control_dependencies([assign_op]):
             tf.random.set_seed(seed)
-            ll, ll_grad = routine(pf, initial_state, use_correction_term, observations_dataset, T,
-                                  modifiable_transition_matrix)
-
-        ll_eps_list = []
-        for n_val in range(mesh.shape[1]):
-            tf_val_eps = tf.constant([val[k] + (epsilon if k == n_val else 0.) for k in range(mesh.shape[1])],
-                                     dtype=tf.float32)
-            transition_matrix = tf.linalg.diag(tf_val_eps)
-            assign_op = modifiable_transition_matrix.assign(transition_matrix)
-            with tf.control_dependencies([assign_op]):
-                tf.random.set_seed(seed)
-                ll_eps, _ = routine(pf, initial_state, use_correction_term, observations_dataset, T,
-                                    modifiable_transition_matrix)
-                ll_eps_list.append((ll_eps - ll) / epsilon)
-
-        likelihoods = likelihoods.write(tf.cast(i, tf.int32), ll)
-        gradients = gradients.write(tf.cast(i, tf.int32), tf.convert_to_tensor(ll_eps_list, dtype=tf.float32))
-    return likelihoods.stack(), gradients.stack()
+            ll_eps, _ = routine(pf, initial_state, False, observations_dataset, T,
+                                modifiable_transition_matrix)
+            ll_eps_list.append((ll_eps - ll) / epsilon)
+    return -ll, -tf.convert_to_tensor(ll_eps_list)
 
 
-def plot_surface(mesh, mesh_size, data, filename, savefig):
-    seaborn.set()
-    fig = plt.figure(figsize=(10, 10))
+def gradient_descent(loss_fun, x0, learning_rate, n_iter):
+    loss = tf.TensorArray(dtype=tf.float32, size=n_iter + 1, dynamic_size=False)
+    val = tf.identity(x0)
+    for i in tqdm.trange(n_iter):
+        loss_val, gradient_val = loss_fun(val)
+        loss = loss.write(tf.cast(i, tf.int32), loss_val)
+        val -= learning_rate * gradient_val
+    loss_val, gradient_val = loss_fun(val)
+    loss = loss.write(tf.cast(n_iter, tf.int32), loss_val)
+    return val, loss.stack()
 
-    x = mesh[:, 0].reshape([mesh_size, mesh_size])
-    y = mesh[:, 1].reshape([mesh_size, mesh_size])
 
-    ax = fig.add_subplot(1, 1, 1, projection='3d')
-
-    ax.plot_surface(x, y, data.reshape([mesh_size, mesh_size]), cmap='viridis', edgecolor='none')
+def plot_loss(data, final_val, filename, savefig):
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(data)
+    ax.set_xlabel('epoch')
+    ax.set_ylabel('-log-likelihood')
+    ax.text(0.75, 0.75, f'final value {final_val}', transform=ax.transAxes)
     fig.tight_layout()
     if savefig:
-        fig.savefig(os.path.join('./charts/', f'surface_{filename}.png'))
+        fig.savefig(os.path.join('./charts/', f'mle_{filename}.png'))
     else:
-        fig.suptitle(f'surface_{filename}')
-        plt.show()
-
-
-def plot_vector_field(mesh, mesh_size, data, grad_data, filename, savefig):
-    fig, ax = plt.subplots(figsize=(10, 10))
-
-    x = mesh[:, 0].reshape([mesh_size, mesh_size])
-    y = mesh[:, 1].reshape([mesh_size, mesh_size])
-
-    contour = ax.contour(x, y, data.reshape([mesh_size, mesh_size]))
-    ax.clabel(contour, inline=1, fontsize=10)
-    ax.quiver(mesh[:, 0], mesh[:, 1], grad_data[:, 0], grad_data[:, 1])
-    fig.tight_layout()
-    if savefig:
-        fig.savefig(os.path.join('./charts/', f'field_{filename}.png'))
-    else:
-        fig.suptitle(f'field_{filename}')
+        fig.suptitle(f'mle_{filename}')
         plt.show()
 
 
 def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100, batch_size=1, n_particles=25,
-         data_seed=0, filter_seed=1, mesh_size=10, savefig=True):
+         data_seed=0, filter_seed=1, learning_rate=0.001, n_iter=50, savefig=False):
     transition_matrix = 0.5 * np.eye(2, dtype=np.float32)
     transition_covariance = np.eye(2, dtype=np.float32)
     observation_matrix = np.eye(2, dtype=np.float32)
@@ -202,21 +171,20 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
                       transition_covariance_chol,
                       resampling_method, resampling_criterion)
 
-    x_linspace = np.linspace(0.25, 0.75, mesh_size).astype(np.float32)
-    y_linspace = np.linspace(0.25, 0.75, mesh_size).astype(np.float32)
-    mesh = np.asanyarray([(x, y) for x in x_linspace for y in y_linspace])
+    x0 = tf.constant([0.25, 0.25])
 
     if resampling_method.DIFFERENTIABLE:
-        log_likelihoods, gradients = get_surface(mesh, modifiable_transition_matrix, smc, initial_state, False,
-                                                 observation_dataset, T, filter_seed)
+        loss_fun = lambda x: values_and_gradient(x, modifiable_transition_matrix, smc,
+                                                 initial_state, observation_dataset, T,
+                                                 filter_seed)
     else:
-        log_likelihoods, gradients = get_surface_finite_difference(mesh, modifiable_transition_matrix, smc,
-                                                                   initial_state, False, observation_dataset, T,
-                                                                   filter_seed)
+        loss_fun = lambda x: values_and_gradient_finite_diff(x, modifiable_transition_matrix, smc,
+                                                             initial_state, observation_dataset, T,
+                                                             filter_seed)
 
-    plot_surface(mesh, mesh_size, log_likelihoods.numpy(), resampling_method_enum.name, savefig)
-    plot_vector_field(mesh, mesh_size, log_likelihoods.numpy(), gradients.numpy(), resampling_method_enum.name, savefig)
+    final_value, loss = gradient_descent(loss_fun, x0, learning_rate, n_iter)
+    plot_loss(loss, final_value, resampling_method_enum.name, savefig)
 
 
 if __name__ == '__main__':
-    main(ResamplingMethodsEnum.REGULARIZED, 0.5, T=125, mesh_size=10, resampling_kwargs=dict(epsilon=0.5))
+    main(ResamplingMethodsEnum.SYSTEMATIC, 0.5, T=125, n_particles=100, batch_size=50, resampling_kwargs=dict())
