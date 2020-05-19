@@ -11,7 +11,7 @@ from tqdm import tqdm
 tf.config.set_visible_devices([], 'GPU')
 
 from filterflow.base import State
-from filterflow.models.simple_linear_gaussian import make_filter
+from filterflow.models.optimal_proposal_linear_gaussian import make_filter
 from filterflow.resampling import MultinomialResampler, SystematicResampler, StratifiedResampler, RegularisedTransform
 from filterflow.resampling.criterion import NeverResample, AlwaysResample, NeffCriterion
 from filterflow.resampling.differentiable import PartiallyCorrectedRegularizedTransform
@@ -29,6 +29,28 @@ def get_data(transition_matrix, observation_matrix, transition_covariance, obser
     data = sample[1].data.astype(np.float32)
     return data.reshape(T, 1, 1, -1)
 
+
+def get_observation_matrix(dx, dy, dense=False, random_state=None):
+    if random_state is None:
+        random_state = np.random.RandomState(None)
+    if dense:
+        return random_state.normal(0., 1., [dy, dx]).astype(np.float32)
+    return np.eye(dy, dx, dtype=np.float32)
+
+
+def get_transition_matrix(alpha, dx):
+    arange = np.arange(1, dx + 1, dtype=np.float32)
+    return alpha ** (np.abs(arange[None, :] - arange[:, None]) + 1)
+
+
+def get_transition_covariance(dx):
+    return np.eye(dx, dtype=np.float32)
+
+
+def get_observation_covariance(r, dy):
+    return r * np.eye(dy, dtype=np.float32)
+
+
 class ResamplingMethodsEnum(enum.IntEnum):
     MULTINOMIAL = 0
     SYSTEMATIC = 1
@@ -38,36 +60,56 @@ class ResamplingMethodsEnum(enum.IntEnum):
     OPTIMIZED = 5
 
 
+@tf.function
+def run_smc(smc, state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts):
+    iterator = iter(observations_dataset)
+    for t in tf.range(T):
+        mu_t = mu_ts[t]
+        beta_t = beta_ts[t]
+        sigma_t = tf.math.exp(log_sigma_ts[t])
+        obs = iterator.get_next()
+        state = smc.update(state, obs, [mu_t, beta_t, sigma_t])
+    res = tf.reduce_mean(state.log_likelihoods)
+    return res
+
+
+@tf.function
+def routine(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts):
+    with tf.GradientTape() as tape:
+        tape.watch([mu_ts, beta_ts, log_sigma_ts])
+        log_likelihood = run_smc(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts)
+        res = -log_likelihood
+    return res, tape.gradient(res, [mu_ts, beta_ts, log_sigma_ts])
+
+
 def get_gradient_descent_function():
     # This is a trick because tensorflow doesn't allow you to create variables inside a decorated function
+
     @tf.function
-    def gradient_descent(pf, initial_state, observations_dataset, T, gradient_variables, n_iter, optimizer):
+    def gradient_descent(pf, initial_state, observations_dataset, T, n_iter, optimizer, mu_ts, beta_ts, log_sigma_ts):
         loss = tf.TensorArray(dtype=tf.float32, size=n_iter + 1, dynamic_size=False)
         for i in tf.range(n_iter):
-            with tf.GradientTape() as tape:
-                tape.watch(gradient_variables)
-                final_state = pf(initial_state, observations_dataset, T, return_final=True)
-                loss_value = -tf.reduce_mean(final_state.log_likelihoods)
+            loss_value, grads = routine(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts)
             loss = loss.write(tf.cast(i, tf.int32), loss_value)
-            grads = tape.gradient(loss_value, gradient_variables)
-            optimizer.apply_gradients(zip(grads, gradient_variables))
-        final_state = pf(initial_state, observations_dataset, T, return_final=True)
-        loss = loss.write(tf.cast(n_iter, tf.int32), -tf.reduce_mean(final_state.log_likelihoods))
-        return [tf.convert_to_tensor(var) for var in gradient_variables], loss.stack()
+            optimizer.apply_gradients(zip(grads, [mu_ts, beta_ts, log_sigma_ts]))
+        final_log_likelihood = run_smc(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts)
+        loss = loss.write(tf.cast(n_iter, tf.int32), -final_log_likelihood)
+        return [tf.convert_to_tensor(var) for var in (mu_ts, beta_ts, log_sigma_ts)], loss.stack()
 
     return gradient_descent
 
 
-def compare_learning_rates(pf, initial_state, observations_dataset, T, gradient_variables, initial_values, n_iter,
-                           optimizer_maker, learning_rates):
+def compare_learning_rates(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts, initial_values,
+                           n_iter, optimizer_maker, learning_rates):
     loss_profiles = []
+    gradient_variables = mu_ts, beta_ts, log_sigma_ts
     reset_ops = [k.assign(v) for k, v in zip(gradient_variables, initial_values)]
     for learning_rate in tqdm(learning_rates):
         optimizer = optimizer_maker(learning_rate=learning_rate)
         gradient_descent_function = get_gradient_descent_function()
         with tf.control_dependencies([reset_ops]):
             final_variables, loss_profile = gradient_descent_function(pf, initial_state, observations_dataset, T,
-                                                                      gradient_variables, n_iter, optimizer)
+                                                                      n_iter, optimizer, mu_ts, beta_ts, log_sigma_ts)
         loss_profiles.append(loss_profile.numpy())
     return loss_profiles
 
@@ -95,12 +137,13 @@ def plot_variables(variables_df, filename, savefig):
 
 
 def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), resampling_kwargs=None,
+         alpha=0.42, dx=10, dy=3, observation_covariance=0.1, dense=False,
          T=100, batch_size=1, n_particles=25,
          data_seed=0, n_iter=50, savefig=False):
-    transition_matrix = 0.5 * np.eye(2, dtype=np.float32)
-    transition_covariance = np.eye(2, dtype=np.float32)
-    observation_matrix = np.eye(2, dtype=np.float32)
-    observation_covariance = 0.1 * np.eye(2, dtype=np.float32)
+    transition_matrix = get_transition_matrix(alpha, dx)
+    transition_covariance = get_transition_covariance(dx)
+    observation_matrix = get_observation_matrix(dx, dy, dense)
+    observation_covariance = get_observation_covariance(observation_covariance, dy)
 
     resampling_method_enum = ResamplingMethodsEnum(resampling_method_value)
 
@@ -141,19 +184,26 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
     else:
         raise ValueError(f'resampling_method_name {resampling_method_enum} is not a valid ResamplingMethodsEnum')
 
-    init_transition_matrix = (0.5 * np.eye(2) + 0.1 * np_random_state.randn(2, 2)).astype(np.float32)
-    modifiable_transition_matrix = tf.Variable(init_transition_matrix, trainable=True)
     observation_matrix = tf.convert_to_tensor(observation_matrix)
     transition_covariance_chol = tf.linalg.cholesky(transition_covariance)
     observation_covariance_chol = tf.linalg.cholesky(observation_covariance)
 
-    initial_particles = np_random_state.normal(0., 1., [batch_size, n_particles, 2]).astype(np.float32)
+    initial_particles = np_random_state.normal(0., 1., [batch_size, n_particles, dx]).astype(np.float32)
     initial_state = State(initial_particles)
 
-    smc = make_filter(observation_matrix, modifiable_transition_matrix, observation_covariance_chol,
+    smc = make_filter(observation_matrix, transition_matrix, observation_covariance_chol,
                       transition_covariance_chol, resampling_method, resampling_criterion)
 
-    variables = [modifiable_transition_matrix]
+    scale = 0.5
+
+    mu_ts_init = scale * np_random_state.normal(0., 1., [T, dx]).astype(np.float32)
+    beta_ts_init = 1. + scale * np_random_state.normal(0., 1., [T, dx]).astype(np.float32)
+    log_sigma_ts_init = scale * np_random_state.normal(0., 1., [T, dx]).astype(np.float32)
+
+    mu_ts = tf.Variable(mu_ts_init, trainable=True)
+    beta_ts = tf.Variable(beta_ts_init, trainable=True)
+
+    log_sigma_ts = tf.Variable(log_sigma_ts_init, trainable=True)
 
     def optimizer_maker(learning_rate):
         # tf.function doesn't like creating variables. This is a way to create them outside the graph
@@ -161,9 +211,9 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
         optimizer = tf.optimizers.Adam(learning_rate=learning_rate)
         return optimizer
 
-    initial_values = [init_transition_matrix]
+    initial_values = [mu_ts_init, beta_ts_init, log_sigma_ts_init]
 
-    losses = compare_learning_rates(smc, initial_state, observation_dataset, T, variables,
+    losses = compare_learning_rates(smc, initial_state, observation_dataset, T, mu_ts, beta_ts, log_sigma_ts,
                                     initial_values, n_iter, optimizer_maker, learning_rates)
     losses_df = pd.DataFrame(np.stack(losses).T, columns=learning_rates)
     losses_df.columns.name = 'learning rate'
@@ -174,6 +224,6 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
 
 if __name__ == '__main__':
     learning_rates = np.logspace(-5, -1, 5, base=10).astype(np.float32)
-    main(ResamplingMethodsEnum.REGULARIZED, 0.5, T=100, n_particles=10, batch_size=100, learning_rates=learning_rates,
+    main(ResamplingMethodsEnum.MULTINOMIAL, 0.5, T=100, n_particles=10, batch_size=100, learning_rates=learning_rates,
          n_iter=500,
          resampling_kwargs=dict(epsilon=0.5, scaling=0.75, convergence_threshold=1e-1))

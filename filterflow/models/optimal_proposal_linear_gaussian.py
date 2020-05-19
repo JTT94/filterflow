@@ -18,10 +18,12 @@ class LearnableProposalModel(ProposalModelBase):
         self._standard_noise = tfp.distributions.MultivariateNormalDiag(tf.zeros(transition_matrix.shape[0]),
                                                                         tf.ones(transition_matrix.shape[0]))
 
+    @tf.function
     def propose(self, state: State, inputs, _observation: tf.Tensor):
         """See base class"""
-        mu_t, beta_t, sigma_t = inputs
-
+        mu_t = inputs[0]
+        beta_t = inputs[1]
+        sigma_t = inputs[2]
         transition_matrix = tf.linalg.matmul(tf.linalg.diag(beta_t), self._transition_matrix)
 
         pushed_particles = tf.reshape(mu_t, [1, 1, -1]) + tf.linalg.matvec(transition_matrix, state.particles)
@@ -57,7 +59,7 @@ class LearnableProposalModel(ProposalModelBase):
 
 def make_filter(observation_matrix, transition_matrix, observation_error_chol, transition_noise_chol, resampling_method,
                 resampling_criterion, observation_error_bias=None, transition_noise_bias=None):
-    dy, dx = observation_matrix
+    dy, dx = observation_matrix.shape
 
     if observation_error_bias is None:
         observation_error_bias = tf.zeros(dy)
