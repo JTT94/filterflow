@@ -8,8 +8,6 @@ import pykalman
 import tensorflow as tf
 from tqdm import tqdm
 
-tf.config.set_visible_devices([], 'GPU')
-
 from filterflow.base import State
 from filterflow.models.simple_linear_gaussian import make_filter
 from filterflow.resampling import MultinomialResampler, SystematicResampler, StratifiedResampler, RegularisedTransform
@@ -26,7 +24,10 @@ def get_data(transition_matrix, observation_matrix, transition_covariance, obser
         random_state = np.random.RandomState()
     kf = pykalman.KalmanFilter(transition_matrix, observation_matrix, transition_covariance, observation_covariance)
     sample = kf.sample(T, random_state=random_state)
-    return sample[1].data.astype(np.float32)
+    data = sample[1].data.astype(np.float32)
+    print(data.shape)
+    print(kf.loglikelihood(data))
+    return data.reshape(T, 1, 1, -1)
 
 
 class ResamplingMethodsEnum(enum.IntEnum):
@@ -57,7 +58,7 @@ def get_gradient_descent_function():
     @tf.function
     def gradient_descent(pf, initial_state, observations_dataset, T, gradient_variables, n_iter, optimizer):
         loss = tf.TensorArray(dtype=tf.float32, size=n_iter + 1, dynamic_size=False)
-        for i in tf.range(n_iter):
+        for i in range(n_iter):
             with tf.GradientTape() as tape:
                 tape.watch(gradient_variables)
                 final_state = pf(initial_state, observations_dataset, T, return_final=True)
@@ -160,21 +161,20 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
     modifiable_transition_matrix = tf.Variable(init_transition_matrix, trainable=True)
     observation_matrix = tf.convert_to_tensor(observation_matrix)
     transition_covariance_chol = tf.linalg.cholesky(transition_covariance)
-    observation_covariance_chol = tf.linalg.cholesky(observation_matrix)
+    observation_covariance_chol = tf.linalg.cholesky(observation_covariance)
 
     initial_particles = np_random_state.normal(0., 1., [batch_size, n_particles, 2]).astype(np.float32)
     initial_state = State(initial_particles)
 
     smc = make_filter(observation_matrix, modifiable_transition_matrix, observation_covariance_chol,
-                      transition_covariance_chol,
-                      resampling_method, resampling_criterion)
+                      transition_covariance_chol, resampling_method, resampling_criterion)
 
     variables = [modifiable_transition_matrix]
 
     def optimizer_maker(learning_rate):
         # tf.function doesn't like creating variables. This is a way to create them outside the graph
         # We can't reuse the same optimizer because it would be giving a warmed-up momentum to the ones run later
-        optimizer = tf.optimizers.SGD(learning_rate=learning_rate)
+        optimizer = tf.optimizers.Adam(learning_rate=learning_rate)
         return optimizer
 
     initial_values = [init_transition_matrix]
@@ -189,6 +189,7 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
 
 
 if __name__ == '__main__':
-    learning_rates = np.logspace(-5, 1, 10).astype(np.float32)
-    main(ResamplingMethodsEnum.REGULARIZED, 0.5, T=100, n_particles=4, batch_size=4, learning_rates=learning_rates, n_iter=500,
-         resampling_kwargs=dict(epsilon=0.5, scaling=0.75, convergence_threshold=1e-4))
+    learning_rates = np.logspace(-5, 0, 5).astype(np.float32)
+    main(ResamplingMethodsEnum.REGULARIZED, 0.5, T=100, n_particles=4, batch_size=4, learning_rates=learning_rates,
+         n_iter=100,
+         resampling_kwargs=dict(epsilon=0.5, scaling=0.75, convergence_threshold=1e-1))
