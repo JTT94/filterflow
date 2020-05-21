@@ -70,14 +70,17 @@ def values_and_gradient(start_values, gradient_variables, pf, initial_state,
     
 def gradient_descent(loss_fun, init_values, learning_rate, n_iter):
     loss = tf.TensorArray(dtype=tf.float32, size=n_iter + 1, dynamic_size=False)
+    params = tf.TensorArray(dtype=tf.float32, size=n_iter + 1, dynamic_size=False)
     val = init_values
     for i in tqdm.trange(n_iter):
         loss_val, gradient_val = loss_fun(val)
         loss = loss.write(tf.cast(i, tf.int32), loss_val)
         val -= learning_rate * gradient_val
+        params = params.write(tf.cast(n_iter, tf.int32), val)
         tf.print('Loss: ', loss_val, 'Gradient: ',gradient_val)
     loss_val, gradient_val = loss_fun(val)
     loss = loss.write(tf.cast(n_iter, tf.int32), loss_val)
+    params = params.write(tf.cast(n_iter, tf.int32), val)
     
     return val, loss.stack()
 
@@ -169,5 +172,6 @@ if __name__ == '__main__':
          resampling_neff = 0.5, 
          T=len(dataset), 
          n_particles=100, 
+         learning_rate=0.02,
          batch_size=50, resampling_kwargs={'epsilon':0.5},
          savefig=True)
