@@ -75,7 +75,7 @@ def gradient_descent(loss_fun, init_values, learning_rate, n_iter):
         loss_val, gradient_val = loss_fun(val)
         loss = loss.write(tf.cast(i, tf.int32), loss_val)
         val -= learning_rate * gradient_val
-        tf.print('Loss: ', loss, 'Gradient: ',gradient_val)
+        tf.print('Loss: ', loss_val, 'Gradient: ',gradient_val)
     loss_val, gradient_val = loss_fun(val)
     loss = loss.write(tf.cast(n_iter, tf.int32), loss_val)
     
@@ -169,4 +169,5 @@ if __name__ == '__main__':
          resampling_neff = 0.5, 
          T=len(dataset), 
          n_particles=100, 
-         batch_size=50, resampling_kwargs={'epsilon':0.5})
+         batch_size=50, resampling_kwargs={'epsilon':0.5},
+         savefig=True)
