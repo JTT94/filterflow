@@ -56,10 +56,11 @@ def routine(pf, initial_state, resampling_correction, observations_dataset, T, g
 
 # DO NOT DECORATE
 def get_surface(mesh, modifiable_transition_matrix, pf, initial_state, use_correction_term, observations_dataset, T,
-                seed):
+                seed, use_tqdm=False):
     likelihoods = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[])
     gradients = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[2])
-    for i, val in enumerate(tqdm.tqdm(mesh)):
+    iterable = enumerate(tqdm.tqdm(mesh)) if use_tqdm else enumerate(mesh)
+    for i, val in iterable:
         tf_val = tf.constant(val)
         transition_matrix = tf.linalg.diag(tf_val)
         assign_op = modifiable_transition_matrix.assign(transition_matrix)
@@ -76,11 +77,12 @@ def get_surface(mesh, modifiable_transition_matrix, pf, initial_state, use_corre
 
 # DO NOT DECORATE
 def get_surface_finite_difference(mesh, modifiable_transition_matrix, pf, initial_state, use_correction_term,
-                                  observations_dataset, T, seed, epsilon=1e-3):
+                                  observations_dataset, T, seed, epsilon=1e-3, use_tqdm=False):
     likelihoods = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[])
     gradients = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[2])
-    for i, val in enumerate(tqdm.tqdm(mesh)):
 
+    iterable = enumerate(tqdm.tqdm(mesh)) if use_tqdm else enumerate(mesh)
+    for i, val in iterable:
         tf_val = tf.constant(val)
         transition_matrix = tf.linalg.diag(tf_val)
         assign_op = modifiable_transition_matrix.assign(transition_matrix)
@@ -119,7 +121,7 @@ def plot_surface(mesh, mesh_size, data, method_name, resampling_kwargs, savefig)
     fig.tight_layout()
 
     if savefig:
-        filename = method_name + '_' + str(resampling_kwargs)
+        filename = method_name + '_' + str(resampling_kwargs.get('epsilon', 'other'))
         fig.savefig(os.path.join('./charts/', f'surface_{filename}.png'))
     else:
         fig.suptitle(f'surface_{method_name}')
@@ -137,7 +139,7 @@ def plot_vector_field(mesh, mesh_size, data, grad_data, method_name, resampling_
     ax.quiver(mesh[:, 0], mesh[:, 1], grad_data[:, 0], grad_data[:, 1])
     fig.tight_layout()
     if savefig:
-        filename = method_name + '_' + str(resampling_kwargs)
+        filename = method_name + '_' + str(resampling_kwargs.get('epsilon', 'other'))
         fig.savefig(os.path.join('./charts/', f'field_{filename}.png'))
     else:
         fig.suptitle(f'field_{method_name}')
@@ -145,7 +147,7 @@ def plot_vector_field(mesh, mesh_size, data, grad_data, method_name, resampling_
 
 
 def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100, batch_size=1, n_particles=25,
-         data_seed=0, filter_seed=1, mesh_size=10, savefig=False):
+         data_seed=0, filter_seed=1, mesh_size=10, savefig=False, use_tqdm=False):
     transition_matrix = 0.5 * np.eye(2, dtype=np.float32)
     transition_covariance = np.eye(2, dtype=np.float32)
     observation_matrix = np.eye(2, dtype=np.float32)
@@ -208,11 +210,11 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
 
     if resampling_method.DIFFERENTIABLE:
         log_likelihoods, gradients = get_surface(mesh, modifiable_transition_matrix, smc, initial_state, False,
-                                                 observation_dataset, T, filter_seed)
+                                                 observation_dataset, T, filter_seed, use_tqdm)
     else:
         log_likelihoods, gradients = get_surface_finite_difference(mesh, modifiable_transition_matrix, smc,
                                                                    initial_state, False, observation_dataset, T,
-                                                                   filter_seed)
+                                                                   filter_seed, use_tqdm)
 
     plot_surface(mesh, mesh_size, log_likelihoods.numpy(), resampling_method_enum.name, resampling_kwargs, savefig)
     plot_vector_field(mesh, mesh_size, log_likelihoods.numpy(), gradients.numpy(), resampling_method_enum.name,
@@ -220,11 +222,15 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
 
 
 def fun_to_distribute(epsilon):
-    main(ResamplingMethodsEnum.REGULARIZED, 0.5, T=150, mesh_size=20,
-         resampling_kwargs=dict(epsilon=epsilon, scaling=0.5, convergence_threshold=1e-2))
+    main(ResamplingMethodsEnum.REGULARIZED, resampling_neff=0.5, T=150, mesh_size=15,
+         resampling_kwargs=dict(epsilon=epsilon, scaling=0.5, convergence_threshold=1e-2), savefig=True, use_tqdm=False)
 
 
 if __name__ == '__main__':
-    pool = multiprocessing.Pool(multiprocessing.cpu_count()-1)
+    import tqdm
     epsilons = [0.25, 0.5, 0.75, 1.]
-    pool.map(fun_to_distribute, epsilons)
+    pool = multiprocessing.Pool(multiprocessing.cpu_count()-1)
+    for _ in tqdm.tqdm(pool.imap_unordered(fun_to_distribute, epsilons, len(epsilons))):
+        pass
+    pool.close()
+    pool.join()
