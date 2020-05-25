@@ -52,7 +52,7 @@ def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsil
                   threshold, max_iter):
     batch_size = log_alpha.shape[0]
     continue_flag = tf.ones([batch_size], dtype=bool)
-    epsilon_0 = epsilon # particles_diameter ** 2
+    epsilon_0 = particles_diameter ** 2
     scaling_factor = scaling ** 2
 
     a_y_init = softmin(epsilon_0, cost_yx, log_alpha)
@@ -124,7 +124,7 @@ def sinkhorn_potentials(log_alpha, x, log_beta, y, epsilon, scaling, threshold, 
     cost_yx = cost(y, tf.stop_gradient(x))
     cost_xx = cost(x, tf.stop_gradient(x))
     cost_yy = cost(y, tf.stop_gradient(y))
-    diameter_ = 1. # tf.stop_gradient(diameter(x, y))
+    diameter_ = tf.stop_gradient(diameter(x, y))
     a_y, b_x, a_x, b_y, total_iter = sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsilon,
                                                    diameter_, scaling, threshold, max_iter)
 
