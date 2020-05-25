@@ -237,12 +237,22 @@ flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.85, 'scaling')
 flags.DEFINE_float('convergence_threshold', 1e-4, 'convergence_threshold')
 flags.DEFINE_integer('n_particles', 100, 'n_particles', lower_bound=1)
+flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
 flags.DEFINE_integer('T', 150, 'T', lower_bound=1)
 flags.DEFINE_integer('mesh_size', 20, 'mesh_size', lower_bound=1)
 flags.DEFINE_boolean('savefig', False, 'Save fig')
 
 def flag_main(argb):
-    print(FLAGS)
+    print('epsilon: {0}'.format(FLAGS.epsilon))
+    print('resampling_neff: {0}'.format(FLAGS.resampling_neff))
+    print('convergence_threshold: {0}'.format(FLAGS.convergence_threshold))
+    print('n_particles: {0}'.format(FLAGS.n_particles))
+    print('T: {0}'.format(FLAGS.T))
+    print('mesh_size: {0}'.format(FLAGS.mesh_size))
+    print('savefig: {0}'.format(FLAGS.savefig))
+    print('scaling: {0}'.format(FLAGS.scaling))
+    print('max_iter: {0}'.format(FLAGS.max_iter))
+
     main(ResamplingMethodsEnum.REGULARIZED,
          resampling_neff=FLAGS.resampling_neff,
          T=FLAGS.T,
@@ -251,7 +261,8 @@ def flag_main(argb):
          savefig=FLAGS.savefig,
          resampling_kwargs=dict(epsilon=FLAGS.epsilon, 
                                 scaling=FLAGS.scaling, 
-                                convergence_threshold=FLAGS.convergence_threshold))
+                                convergence_threshold=FLAGS.convergence_threshold,
+                                max_iter=FLAGS.max_iter))
 
 
 if __name__ == '__main__':
