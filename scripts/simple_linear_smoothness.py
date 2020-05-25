@@ -1,6 +1,6 @@
 import enum
 import os
-
+import sys
 import multiprocessing
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,9 +9,7 @@ import seaborn
 import tensorflow as tf
 import tqdm
 from mpl_toolkits import mplot3d
-
-
-import sys
+from absl import flags, app
 
 sys.path.append("../")
 from filterflow.base import State
@@ -150,6 +148,16 @@ def plot_vector_field(mesh, mesh_size, data, grad_data, method_name, resampling_
         plt.show()
 
 
+# define flags
+
+FLAGS = flags.FLAGS
+
+flags.DEFINE_float('epsilon', 0.5, 'epsilon')
+flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
+flags.DEFINE_integer('n_particles', 100, 'n_particles', lower_bound=1)
+flags.DEFINE_boolean('savefig', False, 'Save fig')
+
+
 def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100, batch_size=1, n_particles=25,
          data_seed=0, filter_seed=1, mesh_size=10, savefig=True, use_tqdm=False):
     transition_matrix = 0.5 * np.eye(2, dtype=np.float32)
@@ -230,11 +238,15 @@ def fun_to_distribute(epsilon):
          resampling_kwargs=dict(epsilon=epsilon, scaling=0.5, convergence_threshold=1e-2), savefig=True, use_tqdm=False)
 
 
+def flag_main(argb):
+    main(ResamplingMethodsEnum.REGULARIZED,
+         resampling_neff=FLAGS.resampling_neff,
+         T=150,
+         mesh_size=20,
+         n_particles=FLAGS.n_particles,
+         savefig=FLAGS.savefig,
+         resampling_kwargs=dict(epsilon=FLAGS.epsilon, scaling=0.5, convergence_threshold=1e-2))
+
+
 if __name__ == '__main__':
-    import tqdm
-    epsilons = [0.25, 0.5, 0.75, 1.]
-    pool = multiprocessing.Pool(multiprocessing.cpu_count()-1)
-    for _ in tqdm.tqdm(pool.imap_unordered(fun_to_distribute, epsilons, len(epsilons))):
-        pass
-    pool.close()
-    pool.join()
+    app.run(flag_main)

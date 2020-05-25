@@ -1,0 +1,1 @@
+python ./simple_linear_smoothness.py --epsilon=0.5 --n_particles=100 -savefig
