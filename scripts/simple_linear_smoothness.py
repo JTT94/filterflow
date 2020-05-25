@@ -9,6 +9,7 @@ import seaborn
 import tensorflow as tf
 import tqdm
 from mpl_toolkits import mplot3d
+from absl import flags, app
 
 sys.path.append("../")
 from filterflow.base import State
@@ -144,6 +145,14 @@ def plot_vector_field(mesh, mesh_size, data, grad_data, method_name, resampling_
         fig.suptitle(f'field_{method_name}')
         plt.show()
 
+# define flags
+
+FLAGS = flags.FLAGS
+
+flags.DEFINE_float('epsilon', 0.5, 'epsilon')
+flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
+flags.DEFINE_integer('n_particles', 100, 'n_particles', lower_bound=1)
+flags.DEFINE_boolean('savefig', False, 'Save fig')
 
 def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100, batch_size=1, n_particles=25,
          data_seed=0, filter_seed=1, mesh_size=10, savefig=False):
@@ -220,13 +229,15 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
                       resampling_kwargs, savefig)
 
 
-def fun_to_distribute(epsilon):
-    main(ResamplingMethodsEnum.REGULARIZED, 0.5, T=150, mesh_size=20, savefig=True,
-         resampling_kwargs=dict(epsilon=epsilon, scaling=0.5, convergence_threshold=1e-2))
+def flag_main(argb):
+    main(ResamplingMethodsEnum.REGULARIZED, 
+        resampling_neff = FLAGS.resampling_neff, 
+        T=150, 
+        mesh_size=20, 
+        n_particles=FLAGS.n_particles,
+        savefig=FLAGS.savefig,
+        resampling_kwargs=dict(epsilon=FLAGS.epsilon, scaling=0.5, convergence_threshold=1e-2))
 
 
 if __name__ == '__main__':
-    epsilons = [0.25, 0.5, 0.75, 1.]
-    for epsilon in epsilons:
-        print('Epsilon: {0}'.format(epsilon))
-        fun_to_distribute(epsilon)
+    app.run(flag_main)
