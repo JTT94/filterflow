@@ -28,15 +28,17 @@ def transport_from_potentials(x, f, g, eps, logw, n):
     """
     float_n = tf.cast(n, float)
     log_n = tf.math.log(float_n)
-    # with tf.GradientTape() as tape:
-    # tape.watch([x, f, g, logw])
+
     cost_matrix = cost(x, x)
+    f_0 = tf.expand_dims(f[:, 0], -1)
+    f = f - f_0
+    g = g + f_0
     fg = tf.expand_dims(f, 2) + tf.expand_dims(g, 1)  # fg = f + g.T
     temp = fg - cost_matrix
     temp = temp / eps
 
     temp = temp - tf.reduce_logsumexp(temp, 1, keepdims=True) + log_n
-    # We "divide the transport matrix by its col-wise sum to make sure that weights normalise to logw.
+    # We "divide" the transport matrix by its col-wise sum to make sure that weights normalise to logw.
     temp = temp + tf.expand_dims(logw, 1)
 
     transport_matrix = tf.math.exp(temp)
@@ -66,9 +68,9 @@ def transport(x, logw, eps, scaling, threshold, max_iter, n):
     log_n = tf.math.log(float_n)
     uniform_log_weight = -log_n * tf.ones_like(logw)
 
-    alpha, beta, _, _, _ = sinkhorn_potentials(logw, x, uniform_log_weight, x, eps, scaling, threshold,
-                                                              max_iter)
-    transport_matrix = transport_from_potentials(x, alpha, beta, eps, logw, float_n)
+    alpha, beta, _, _, _, scaled_x, _ = sinkhorn_potentials(logw, x, uniform_log_weight, x, eps, scaling, threshold,
+                                                            max_iter)
+    transport_matrix = transport_from_potentials(scaled_x, alpha, beta, eps, logw, float_n)
 
     def grad(d_transport):
         d_transport = tf.clip_by_value(d_transport, -1., 1.)

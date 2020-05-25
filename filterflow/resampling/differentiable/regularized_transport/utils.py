@@ -44,6 +44,11 @@ def squared_distances(x: tf.Tensor, y: tf.Tensor) -> tf.Tensor:
     :param y: tf.Tensor[B, M, D]
     :return: tensor of shape [B, N, M]
     :rtype tf.Tensor
+    >>> from ot.utils import euclidean_distances
+    >>> import numpy as np
+    >>> import tensorflow as tf
+    >>> x = np.random.uniform(-1., 1., [5, 10, 10]).astype(np.float32)
+    >>> np.testing.assert_allclose(squared_distances(x, x)[0].numpy(), euclidean_distances(x[0], x[0], squared=True), atol=1e-6)
     """
     # x.shape = [B, N, D]
     xx = tf.reduce_sum(x * x, axis=2, keepdims=True)
@@ -61,4 +66,4 @@ def cost(x: tf.Tensor, y: tf.Tensor) -> tf.Tensor:
     :return: tensor of shape [B, N, M]
     :rtype tf.Tensor
     """
-    return squared_distances(x, y) / tf.constant(2.)
+    return squared_distances(x, y)
