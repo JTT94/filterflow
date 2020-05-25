@@ -132,7 +132,7 @@ def sinkhorn_potentials(log_alpha, x, log_beta, y, epsilon, scaling, threshold, 
     cost_yx = cost(y_, tf.stop_gradient(x_))
     cost_xx = cost(x_, tf.stop_gradient(x_))
     cost_yy = cost(y_, tf.stop_gradient(y_))
-    starting_epsilon = tf.maximum(epsilon, 1.)
+    starting_epsilon = epsilon # tf.maximum(epsilon, 1.)
     a_y, b_x, a_x, b_y, total_iter = sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsilon,
                                                    starting_epsilon, scaling, threshold, max_iter)
     return a_y, b_x, a_x, b_y, total_iter, x_, y_
