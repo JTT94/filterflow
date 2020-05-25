@@ -259,6 +259,7 @@ def flag_main(argb):
          mesh_size=FLAGS.mesh_size,
          n_particles=FLAGS.n_particles,
          savefig=FLAGS.savefig,
+         use_tqdm=True,
          resampling_kwargs=dict(epsilon=FLAGS.epsilon, 
                                 scaling=FLAGS.scaling, 
                                 convergence_threshold=FLAGS.convergence_threshold,
