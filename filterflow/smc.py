@@ -35,7 +35,7 @@ class SMC(Module):
         return self._transition_model.sample(state, inputs)
 
     #@tf.function
-    def update(self, state: State, observation: tf.Tensor, inputs: tf.Tensor):
+    def update(self, state: State, observation: tf.Tensor, inputs: tf.Tensor, seed=seed):
         """
         :param state: State
             current state of the filter
@@ -50,7 +50,7 @@ class SMC(Module):
         # perform resampling
         resampled_state = self._resampling_method.apply(state, resampling_flag)
         # perform sequential IS step
-        new_state = self.propose_and_weight(resampled_state, observation, inputs)
+        new_state = self.propose_and_weight(resampled_state, observation, inputs, seed)
         new_state = self._resampling_correction_term(resampling_flag, new_state, state, observation, inputs)
         return new_state
 
@@ -72,7 +72,7 @@ class SMC(Module):
 
     #@tf.function
     def propose_and_weight(self, state: State, observation: tf.Tensor,
-                           inputs: tf.Tensor):
+                           inputs: tf.Tensor, seed=None):
         """
         :param state: State
             current state of the filter
@@ -82,7 +82,7 @@ class SMC(Module):
             inputs for the observation_model
         :return: Updated weights
         """
-        proposed_state = self._proposal_model.propose(state, inputs, observation)
+        proposed_state = self._proposal_model.propose(state, inputs, observation, seed=seed)
         log_weights = self._transition_model.loglikelihood(state, proposed_state, inputs)
         log_weights = log_weights + self._observation_model.loglikelihood(proposed_state, observation)
         log_weights = log_weights - self._proposal_model.loglikelihood(proposed_state, state, inputs, observation)
@@ -96,7 +96,7 @@ class SMC(Module):
 
     @tf.function
     def _return(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor,
-                inputs_series: tf.data.Dataset):
+                inputs_series: tf.data.Dataset, seed=None):
         # infer dtype
         dtype = initial_state.particles.dtype
 
@@ -112,7 +112,7 @@ class SMC(Module):
         def body(state, states, i):
             observation = data_iterator.get_next()
             inputs = inputs_iterator.get_next()
-            state = self.update(state, observation, inputs)
+            state = self.update(state, observation, inputs, seed)
             states = states.write(i, state)
             return state, states, i + 1
 
@@ -125,18 +125,20 @@ class SMC(Module):
         return final_state, states_series.stack()
 
     @tf.function
-    def _return_all_loop(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor, inputs_series: tf.data.Dataset):
-        _, states_series = self._return(initial_state, observation_series, n_observations, inputs_series)
+    def _return_all_loop(self, initial_state: State, observation_series: tf.data.Dataset, 
+                         n_observations: tf.Tensor, inputs_series: tf.data.Dataset, seed=None):
+        _, states_series = self._return(initial_state, observation_series, n_observations, inputs_series, seed)
         return states_series
 
     @tf.function
-    def _return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor, inputs_series: tf.data.Dataset):
-        final_state, _ = self._return(initial_state, observation_series, n_observations, inputs_series)
+    def _return_final_loop(self, initial_state: State, observation_series: tf.data.Dataset, 
+                           n_observations: tf.Tensor, inputs_series: tf.data.Dataset, seed=None):
+        final_state, _ = self._return(initial_state, observation_series, n_observations, inputs_series, seed)
         return final_state
 
     @tf.function
     def __call__(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor,
-                 inputs_series: tf.data.Dataset = None, return_final=False):
+                 inputs_series: tf.data.Dataset = None, return_final=False, seed=None):
         """
         :param initial_state: State
             initial state of the filter
@@ -147,6 +149,6 @@ class SMC(Module):
         if inputs_series is None:
             inputs_series = tf.data.Dataset.range(n_observations)
         if return_final:
-            return self._return_final_loop(initial_state, observation_series, n_observations, inputs_series)
+            return self._return_final_loop(initial_state, observation_series, n_observations, inputs_series, seed)
         else:
-            return self._return_all_loop(initial_state, observation_series, n_observations, inputs_series)
+            return self._return_all_loop(initial_state, observation_series, n_observations, inputs_series, seed)
