@@ -1,6 +1,6 @@
 import enum
 import os
-
+import sys
 import multiprocessing
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,6 +10,7 @@ import tensorflow as tf
 import tqdm
 from mpl_toolkits import mplot3d
 
+sys.path.append("../")
 from filterflow.base import State
 from filterflow.models.simple_linear_gaussian import make_filter
 from filterflow.resampling import MultinomialResampler, SystematicResampler, StratifiedResampler, RegularisedTransform
@@ -220,11 +221,12 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
 
 
 def fun_to_distribute(epsilon):
-    main(ResamplingMethodsEnum.REGULARIZED, 0.5, T=150, mesh_size=20,
+    main(ResamplingMethodsEnum.REGULARIZED, 0.5, T=150, mesh_size=20, savefig=True,
          resampling_kwargs=dict(epsilon=epsilon, scaling=0.5, convergence_threshold=1e-2))
 
 
 if __name__ == '__main__':
-    pool = multiprocessing.Pool(multiprocessing.cpu_count()-1)
     epsilons = [0.25, 0.5, 0.75, 1.]
-    pool.map(fun_to_distribute, epsilons)
+    for epsilon in epsilons:
+        print('Epsilon: {0}'.format(epsilon))
+        fun_to_distribute(epsilon)
