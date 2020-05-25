@@ -48,11 +48,11 @@ def _simple_sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, epsilon, thresh
 
 
 @tf.function
-def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsilon, epsilon_0, scaling,
+def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsilon, particles_diameter, scaling,
                   threshold, max_iter):
     batch_size = log_alpha.shape[0]
     continue_flag = tf.ones([batch_size], dtype=bool)
-
+    epsilon_0 = particles_diameter ** 2
     scaling_factor = scaling ** 2
 
     a_y_init = softmin(epsilon_0, cost_yx, log_alpha)
@@ -61,10 +61,9 @@ def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsil
     a_x_init = softmin(epsilon_0, cost_xx, log_alpha)
     b_y_init = softmin(epsilon_0, cost_yy, log_beta)
 
-    def stop_condition(i, _a_y, _b_x, _a_x, _b_y, continue_, running_epsilon):
+    def stop_condition(i, _a_y, _b_x, _a_x, _b_y, continue_, _running_epsilon):
         n_iter_cond = i < max_iter - 1
-        epsilon_cond = epsilon < running_epsilon
-        return tf.logical_or(tf.logical_and(n_iter_cond, tf.reduce_any(continue_)), epsilon_cond)
+        return tf.logical_and(n_iter_cond, tf.reduce_any(continue_))
 
     def apply_one(a_y, b_x, a_x, b_y, continue_, running_epsilon):
         running_epsilon_ = tf.reshape(running_epsilon, [-1, 1])
@@ -92,8 +91,9 @@ def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsil
         new_a_y, new_b_x, new_a_x, new_b_y, local_continue = apply_one(a_y, b_x, a_x, b_y, continue_,
                                                                        running_epsilon)
         new_epsilon = tf.maximum(running_epsilon * scaling_factor, epsilon)
+        global_continue = tf.logical_or(new_epsilon < running_epsilon, local_continue)
 
-        return i + 1, new_a_y, new_b_x, new_a_x, new_b_y, local_continue, new_epsilon
+        return i + 1, new_a_y, new_b_x, new_a_x, new_b_y, global_continue, new_epsilon
 
     n_iter = tf.constant(0)
 
@@ -118,21 +118,21 @@ def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsil
     final_b_x = softmin(epsilon, cost_xy, log_beta + tf.stop_gradient(converged_a_y) / epsilon_)
     final_a_x = softmin(epsilon, cost_xx, log_alpha + tf.stop_gradient(converged_a_x) / epsilon_)
     final_b_y = softmin(epsilon, cost_yy, log_beta + tf.stop_gradient(converged_b_y) / epsilon_)
+
     return final_a_y, final_b_x, final_a_x, final_b_y, total_iter + 2
 
 
 @tf.function
 def sinkhorn_potentials(log_alpha, x, log_beta, y, epsilon, scaling, threshold, max_iter):
-    diameter_ = tf.reshape(tf.stop_gradient(diameter(x, y)), [-1, 1, 1])
-    x_ = x / diameter_
-    y_ = y / diameter_
+    diameter_ = tf.stop_gradient(diameter(x, y))
 
+    x_ = x / tf.reshape(diameter_, [-1, 1, 1])
+    y_ = y / tf.reshape(diameter_, [-1, 1, 1])
     cost_xy = cost(x_, tf.stop_gradient(y_))
-
-    cost_yx = cost(y_, tf.stop_gradient(x_))
+    cost_yx = cost(y, tf.stop_gradient(x_))
     cost_xx = cost(x_, tf.stop_gradient(x_))
-    cost_yy = cost(y_, tf.stop_gradient(y_))
-    starting_epsilon = tf.maximum(epsilon, 1.)
+    cost_yy = cost(y, tf.stop_gradient(y_))
     a_y, b_x, a_x, b_y, total_iter = sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsilon,
-                                                   starting_epsilon, scaling, threshold, max_iter)
+                                                   diameter_, scaling, threshold, max_iter)
+
     return a_y, b_x, a_x, b_y, total_iter, x_, y_
