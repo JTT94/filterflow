@@ -21,7 +21,7 @@ class SMC(Module):
         self._resampling_criterion = resampling_criterion
         self._resampling_method = resampling_method
 
-    @tf.function
+    #@tf.function
     def predict(self, state: State, inputs: tf.Tensor):
         """Predict step of the filter
 
@@ -34,7 +34,7 @@ class SMC(Module):
         """
         return self._transition_model.sample(state, inputs)
 
-    @tf.function
+    #@tf.function
     def update(self, state: State, observation: tf.Tensor, inputs: tf.Tensor):
         """
         :param state: State
@@ -54,7 +54,7 @@ class SMC(Module):
         new_state = self._resampling_correction_term(resampling_flag, new_state, state, observation, inputs)
         return new_state
 
-    @tf.function
+    #@tf.function
     def _resampling_correction_term(self, resampling_flag: tf.Tensor, new_state: State, prior_state: State,
                                     observation: tf.Tensor, inputs: tf.Tensor):
         b, n = prior_state.batch_size, prior_state.n_particles
@@ -70,7 +70,7 @@ class SMC(Module):
             tf.stop_gradient(centered_reward) * prior_state.log_weights, 1)
         return attr.evolve(new_state, resampling_correction=resampling_correction)
 
-    @tf.function
+    #@tf.function
     def propose_and_weight(self, state: State, observation: tf.Tensor,
                            inputs: tf.Tensor):
         """
