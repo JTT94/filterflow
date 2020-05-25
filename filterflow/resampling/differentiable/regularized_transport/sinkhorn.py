@@ -106,8 +106,12 @@ def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsil
                    a_x_init,
                    b_y_init,
                    continue_flag,
-                   epsilon_0],
-        back_prop=False)
+                   epsilon_0])
+    converged_a_y, converged_b_x, converged_a_x, converged_b_y = tf.nest.map_structure(tf.stop_gradient,
+                                                                                       (converged_a_y,
+                                                                                        converged_b_x,
+                                                                                        converged_a_x,
+                                                                                        converged_b_y))
 
     epsilon_ = tf.reshape(epsilon, [-1, 1])
     final_a_y = softmin(epsilon, cost_yx, log_alpha + tf.stop_gradient(converged_b_x) / epsilon_)

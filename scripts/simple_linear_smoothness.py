@@ -1,6 +1,7 @@
 import enum
 import os
-
+import sys
+import multiprocessing
 import matplotlib.pyplot as plt
 import numpy as np
 import pykalman
@@ -9,6 +10,7 @@ import tensorflow as tf
 import tqdm
 from mpl_toolkits import mplot3d
 
+sys.path.append("../")
 from filterflow.base import State
 from filterflow.models.simple_linear_gaussian import make_filter
 from filterflow.resampling import MultinomialResampler, SystematicResampler, StratifiedResampler, RegularisedTransform
@@ -105,7 +107,7 @@ def get_surface_finite_difference(mesh, modifiable_transition_matrix, pf, initia
     return likelihoods.stack(), gradients.stack()
 
 
-def plot_surface(mesh, mesh_size, data, filename, savefig):
+def plot_surface(mesh, mesh_size, data, method_name, resampling_kwargs, savefig):
     seaborn.set()
     fig = plt.figure(figsize=(10, 10))
 
@@ -116,14 +118,16 @@ def plot_surface(mesh, mesh_size, data, filename, savefig):
 
     ax.plot_surface(x, y, data.reshape([mesh_size, mesh_size]), cmap='viridis', edgecolor='none')
     fig.tight_layout()
+
     if savefig:
+        filename = method_name + '_' + str(resampling_kwargs)
         fig.savefig(os.path.join('./charts/', f'surface_{filename}.png'))
     else:
-        fig.suptitle(f'surface_{filename}')
+        fig.suptitle(f'surface_{method_name}')
         plt.show()
 
 
-def plot_vector_field(mesh, mesh_size, data, grad_data, filename, savefig):
+def plot_vector_field(mesh, mesh_size, data, grad_data, method_name, resampling_kwargs, savefig):
     fig, ax = plt.subplots(figsize=(10, 10))
 
     x = mesh[:, 0].reshape([mesh_size, mesh_size])
@@ -134,9 +138,10 @@ def plot_vector_field(mesh, mesh_size, data, grad_data, filename, savefig):
     ax.quiver(mesh[:, 0], mesh[:, 1], grad_data[:, 0], grad_data[:, 1])
     fig.tight_layout()
     if savefig:
+        filename = method_name + '_' + str(resampling_kwargs)
         fig.savefig(os.path.join('./charts/', f'field_{filename}.png'))
     else:
-        fig.suptitle(f'field_{filename}')
+        fig.suptitle(f'field_{method_name}')
         plt.show()
 
 
@@ -210,9 +215,18 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
                                                                    initial_state, False, observation_dataset, T,
                                                                    filter_seed)
 
-    plot_surface(mesh, mesh_size, log_likelihoods.numpy(), resampling_method_enum.name, savefig)
-    plot_vector_field(mesh, mesh_size, log_likelihoods.numpy(), gradients.numpy(), resampling_method_enum.name, savefig)
+    plot_surface(mesh, mesh_size, log_likelihoods.numpy(), resampling_method_enum.name, resampling_kwargs, savefig)
+    plot_vector_field(mesh, mesh_size, log_likelihoods.numpy(), gradients.numpy(), resampling_method_enum.name,
+                      resampling_kwargs, savefig)
+
+
+def fun_to_distribute(epsilon):
+    main(ResamplingMethodsEnum.REGULARIZED, 0.5, T=150, mesh_size=20, savefig=True,
+         resampling_kwargs=dict(epsilon=epsilon, scaling=0.5, convergence_threshold=1e-2))
 
 
 if __name__ == '__main__':
-    main(ResamplingMethodsEnum.REGULARIZED, 0.5, T=125, mesh_size=10, resampling_kwargs=dict(epsilon=0.5))
+    epsilons = [0.25, 0.5, 0.75, 1.]
+    for epsilon in epsilons:
+        print('Epsilon: {0}'.format(epsilon))
+        fun_to_distribute(epsilon)

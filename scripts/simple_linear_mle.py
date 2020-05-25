@@ -162,7 +162,7 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
     modifiable_transition_matrix = tf.Variable(transition_matrix, trainable=False)
     observation_matrix = tf.convert_to_tensor(observation_matrix)
     transition_covariance_chol = tf.linalg.cholesky(transition_covariance)
-    observation_covariance_chol = tf.linalg.cholesky(observation_matrix)
+    observation_covariance_chol = tf.linalg.cholesky(observation_covariance)
 
     initial_particles = np_random_state.normal(0., 1., [batch_size, n_particles, 2]).astype(np.float32)
     initial_state = State(initial_particles)

@@ -164,8 +164,7 @@ def schur_decomposition(tensor, max_iter, sort=False):
         return i < max_iter - 1
 
     Q_res, U_res, _ = tf.while_loop(cond, body,
-                                    [tf.eye(tensor.shape[1], batch_shape=[tensor.shape[0]]), tensor, tf.constant(0)],
-                                    back_prop=True)
+                                    [tf.eye(tensor.shape[1], batch_shape=[tensor.shape[0]]), tensor, tf.constant(0)])
 
     if sort:
         eigen = tf.linalg.diag_part(U_res)
