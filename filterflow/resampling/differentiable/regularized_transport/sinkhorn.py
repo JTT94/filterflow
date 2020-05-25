@@ -61,9 +61,10 @@ def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsil
     a_x_init = softmin(epsilon_0, cost_xx, log_alpha)
     b_y_init = softmin(epsilon_0, cost_yy, log_beta)
 
-    def stop_condition(i, _a_y, _b_x, _a_x, _b_y, continue_, _running_epsilon):
+    def stop_condition(i, _a_y, _b_x, _a_x, _b_y, continue_, running_epsilon):
         n_iter_cond = i < max_iter - 1
-        return tf.logical_and(n_iter_cond, tf.reduce_any(continue_))
+        epsilon_cond = epsilon < running_epsilon
+        return tf.logical_or(tf.logical_and(n_iter_cond, tf.reduce_any(continue_)), epsilon_cond)
 
     def apply_one(a_y, b_x, a_x, b_y, continue_, running_epsilon):
         running_epsilon_ = tf.reshape(running_epsilon, [-1, 1])
@@ -91,9 +92,8 @@ def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsil
         new_a_y, new_b_x, new_a_x, new_b_y, local_continue = apply_one(a_y, b_x, a_x, b_y, continue_,
                                                                        running_epsilon)
         new_epsilon = tf.maximum(running_epsilon * scaling_factor, epsilon)
-        global_continue = tf.logical_or(new_epsilon < running_epsilon, local_continue)
 
-        return i + 1, new_a_y, new_b_x, new_a_x, new_b_y, global_continue, new_epsilon
+        return i + 1, new_a_y, new_b_x, new_a_x, new_b_y, local_continue, new_epsilon
 
     n_iter = tf.constant(0)
 
@@ -126,12 +126,13 @@ def sinkhorn_potentials(log_alpha, x, log_beta, y, epsilon, scaling, threshold, 
     diameter_ = tf.reshape(tf.stop_gradient(diameter(x, y)), [-1, 1, 1])
     x_ = x / diameter_
     y_ = y / diameter_
+
     cost_xy = cost(x_, tf.stop_gradient(y_))
+
     cost_yx = cost(y_, tf.stop_gradient(x_))
     cost_xx = cost(x_, tf.stop_gradient(x_))
     cost_yy = cost(y_, tf.stop_gradient(y_))
-    starting_epsilon = tf.maximum(0.5 / (epsilon * scaling ** 2), epsilon)
+    starting_epsilon = tf.maximum(epsilon, 1.)
     a_y, b_x, a_x, b_y, total_iter = sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsilon,
                                                    starting_epsilon, scaling, threshold, max_iter)
-
     return a_y, b_x, a_x, b_y, total_iter, x_, y_

@@ -1,4 +1,5 @@
 import tensorflow as tf
+import tensorflow_probability as tfp
 
 
 def _fillna(tensor):
@@ -8,12 +9,10 @@ def _fillna(tensor):
 
 @tf.function
 def diameter(x, y):
-    min_x = tf.math.reduce_min(x, [1, 2])
-    max_x = tf.math.reduce_max(x, [1, 2])
+    diameter_x = tf.reduce_max(tf.math.reduce_std(x, -1), -1)
+    diameter_y = tf.reduce_max(tf.math.reduce_std(y, -1), -1)
 
-    min_y = tf.math.reduce_min(y, [1, 2])
-    max_y = tf.math.reduce_max(y, [1, 2])
-    return tf.maximum(max_x, max_y) - tf.minimum(min_x, min_y)
+    return tf.maximum(diameter_x, diameter_y)
 
 
 def softmin(epsilon: tf.Tensor, cost_matrix: tf.Tensor, f: tf.Tensor) -> tf.Tensor:
