@@ -35,7 +35,7 @@ class SMC(Module):
         return self._transition_model.sample(state, inputs)
 
     #@tf.function
-    def update(self, state: State, observation: tf.Tensor, inputs: tf.Tensor, seed=seed):
+    def update(self, state: State, observation: tf.Tensor, inputs: tf.Tensor, seed=None):
         """
         :param state: State
             current state of the filter
