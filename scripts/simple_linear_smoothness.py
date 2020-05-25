@@ -243,6 +243,7 @@ flags.DEFINE_integer('mesh_size', 20, 'mesh_size', lower_bound=1)
 flags.DEFINE_boolean('savefig', False, 'Save fig')
 
 def flag_main(argb):
+    tf.random.set_seed(0)
     print('epsilon: {0}'.format(FLAGS.epsilon))
     print('resampling_neff: {0}'.format(FLAGS.resampling_neff))
     print('convergence_threshold: {0}'.format(FLAGS.convergence_threshold))
