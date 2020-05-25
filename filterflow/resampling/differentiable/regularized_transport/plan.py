@@ -68,9 +68,9 @@ def transport(x, logw, eps, scaling, threshold, max_iter, n):
     log_n = tf.math.log(float_n)
     uniform_log_weight = -log_n * tf.ones_like(logw)
 
-    alpha, beta, _, _, _, scaled_x, _ = sinkhorn_potentials(logw, x, uniform_log_weight, x, eps, scaling, threshold,
+    alpha, beta, _, _, _= sinkhorn_potentials(logw, x, uniform_log_weight, x, eps, scaling, threshold,
                                                             max_iter)
-    transport_matrix = transport_from_potentials(scaled_x, alpha, beta, eps, logw, float_n)
+    transport_matrix = transport_from_potentials(x, alpha, beta, eps, logw, float_n)
 
     def grad(d_transport):
         d_transport = tf.clip_by_value(d_transport, -1., 1.)
