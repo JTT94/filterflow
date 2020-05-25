@@ -148,16 +148,6 @@ def plot_vector_field(mesh, mesh_size, data, grad_data, method_name, resampling_
         plt.show()
 
 
-# define flags
-
-FLAGS = flags.FLAGS
-
-flags.DEFINE_float('epsilon', 0.5, 'epsilon')
-flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
-flags.DEFINE_integer('n_particles', 100, 'n_particles', lower_bound=1)
-flags.DEFINE_boolean('savefig', False, 'Save fig')
-
-
 def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100, batch_size=1, n_particles=25,
          data_seed=0, filter_seed=1, mesh_size=10, savefig=True, use_tqdm=False):
     transition_matrix = 0.5 * np.eye(2, dtype=np.float32)
@@ -238,14 +228,30 @@ def fun_to_distribute(epsilon):
          resampling_kwargs=dict(epsilon=epsilon, scaling=0.5, convergence_threshold=1e-2), savefig=True, use_tqdm=False)
 
 
+# define flags
+
+FLAGS = flags.FLAGS
+
+flags.DEFINE_float('epsilon', 0.5, 'epsilon')
+flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
+flags.DEFINE_float('scaling', 0.85, 'scaling')
+flags.DEFINE_float('convergence_threshold', 1e-4, 'convergence_threshold')
+flags.DEFINE_integer('n_particles', 100, 'n_particles', lower_bound=1)
+flags.DEFINE_integer('T', 150, 'T', lower_bound=1)
+flags.DEFINE_integer('mesh_size', 20, 'mesh_size', lower_bound=1)
+flags.DEFINE_boolean('savefig', False, 'Save fig')
+
 def flag_main(argb):
+    print(FLAGS)
     main(ResamplingMethodsEnum.REGULARIZED,
          resampling_neff=FLAGS.resampling_neff,
-         T=150,
-         mesh_size=20,
+         T=FLAGS.T,
+         mesh_size=FLAGS.mesh_size,
          n_particles=FLAGS.n_particles,
          savefig=FLAGS.savefig,
-         resampling_kwargs=dict(epsilon=FLAGS.epsilon, scaling=0.5, convergence_threshold=1e-2))
+         resampling_kwargs=dict(epsilon=FLAGS.epsilon, 
+                                scaling=FLAGS.scaling, 
+                                convergence_threshold=FLAGS.convergence_threshold))
 
 
 if __name__ == '__main__':
