@@ -80,7 +80,7 @@ class PartiallyCorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMet
         super(PartiallyCorrectedRegularizedTransform, self).__init__(name=name)
 
     @tf.function
-    def apply(self, state: State, flags: tf.Tensor):
+    def apply(self, state: State, flags: tf.Tensor, seed=None):
         """ Resampling method
 
         :param state State
@@ -101,7 +101,7 @@ class PartiallyCorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMet
 
         transformed_std = tf.math.reduce_std(resampled_state.particles, axis=[1], keepdims=True)
         alpha = tf.where(transformed_std > 0, weighted_std / transformed_std, 1.)
-        alpha = tf.stop_gradient(tf.clip_by_value(alpha, 0.5, 1.5))
+        alpha = tf.clip_by_value(alpha, 0.5, 1.5)
         beta = (1. - alpha) * weighted_average
 
         return attr.evolve(resampled_state, particles=alpha * resampled_state.particles + beta)

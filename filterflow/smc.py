@@ -102,9 +102,9 @@ class SMC(Module):
     def _return(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor,
                 inputs_series: tf.data.Dataset, seed=None):
         if seed is None:
-            temp_seed = tf.random.uniform((), 0, 2 ** 32, tf.int32)
+            temp_seed = tf.random.uniform((), 0, 2 ** 16, tf.int32)
             seed, = samplers.split_seed(temp_seed, n=1, salt='propose_and_weight')
-        if tf.size(seed) == 0:
+        elif tf.size(seed) == 0:
             seed = tf.stack([seed, 0])
         # infer dtype
         dtype = initial_state.particles.dtype
