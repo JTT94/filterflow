@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from filterflow.resampling.differentiable.regularized_transport.utils import cost, softmin, diameter
+from filterflow.resampling.differentiable.regularized_transport.utils import cost, softmin, diameter, max_min
 
 
 # This is very much adapted from Feydy's geomloss work. Hopefully these should merge into one library...
@@ -128,8 +128,8 @@ def sinkhorn_potentials(log_alpha, x, log_beta, y, epsilon, scaling, threshold, 
     cost_yx = cost(y, tf.stop_gradient(x))
     cost_xx = cost(x, tf.stop_gradient(x))
     cost_yy = cost(y, tf.stop_gradient(y))
-    diameter_ = tf.stop_gradient(diameter(x, y))
+    scale = tf.stop_gradient(max_min(x, y))
     a_y, b_x, a_x, b_y, total_iter = sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsilon,
-                                                   diameter_, scaling, threshold, max_iter)
+                                                   scale, scaling, threshold, max_iter)
 
     return a_y, b_x, a_x, b_y, total_iter

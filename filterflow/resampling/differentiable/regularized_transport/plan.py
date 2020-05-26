@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 from filterflow.resampling.differentiable.regularized_transport.sinkhorn import sinkhorn_potentials
-from filterflow.resampling.differentiable.regularized_transport.utils import cost
+from filterflow.resampling.differentiable.regularized_transport.utils import cost, diameter
 
 
 @tf.function
@@ -65,9 +65,13 @@ def transport(x, logw, eps, scaling, threshold, max_iter, n):
     log_n = tf.math.log(float_n)
     uniform_log_weight = -log_n * tf.ones_like(logw)
 
-    alpha, beta, _, _, _= sinkhorn_potentials(logw, x, uniform_log_weight, x, eps, scaling, threshold,
-                                                            max_iter)
-    transport_matrix = transport_from_potentials(x, alpha, beta, eps, logw, float_n)
+    centered_x = x - tf.stop_gradient(tf.reduce_mean(x, axis=1, keepdims=True))
+    scale = tf.reshape(diameter(x, x), [-1, 1, 1])
+    scaled_x = centered_x / tf.stop_gradient(scale)
+
+    alpha, beta, _, _, _ = sinkhorn_potentials(logw, scaled_x, uniform_log_weight, scaled_x, eps, scaling, threshold,
+                                               max_iter)
+    transport_matrix = transport_from_potentials(scaled_x, alpha, beta, eps, logw, float_n)
 
     def grad(d_transport):
         d_transport = tf.clip_by_value(d_transport, -1., 1.)

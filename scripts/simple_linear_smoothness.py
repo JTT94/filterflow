@@ -62,53 +62,55 @@ def get_surface(mesh, modifiable_transition_matrix, pf, initial_state, use_corre
                 seed, use_tqdm=False):
     likelihoods = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[])
     gradients = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[2])
-    iterable = enumerate(tqdm.tqdm(mesh)) if use_tqdm else enumerate(mesh)
-    for i, val in iterable:
-        tf_val = tf.constant(val)
+    i = 0
+    for val in mesh:
+        tf_val = tf.convert_to_tensor(val)
         transition_matrix = tf.linalg.diag(tf_val)
         assign_op = modifiable_transition_matrix.assign(transition_matrix)
         with tf.control_dependencies([assign_op]):
-            tf.random.set_seed(seed)
             # sadly this can only be done in eager mode for the time being
             # (will be corrected with stateless operations in next tf versions)
             ll, ll_grad = routine(pf, initial_state, use_correction_term, observations_dataset, T,
                                   modifiable_transition_matrix, seed)
         likelihoods = likelihoods.write(tf.cast(i, tf.int32), ll)
         gradients = gradients.write(tf.cast(i, tf.int32), tf.linalg.diag_part(ll_grad))
+        i += 1
+        tf.print('\r', 'Step:', i, '/', mesh.shape[0], end='')
     return likelihoods.stack(), gradients.stack()
 
 
 # DO NOT DECORATE
 @tf.function
 def get_surface_finite_difference(mesh, modifiable_transition_matrix, pf, initial_state, use_correction_term,
-                                  observations_dataset, T, seed, epsilon=1e-3, use_tqdm=False):
+                                  observations_dataset, T, seed, epsilon=1e-2, use_tqdm=False):
     likelihoods = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[])
     gradients = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[2])
 
-    iterable = enumerate(tqdm.tqdm(mesh)) if use_tqdm else enumerate(mesh)
-    for i, val in iterable:
-        tf_val = tf.constant(val)
+    i = 0
+    for val in mesh:
+        tf_val = tf.convert_to_tensor(val)
         transition_matrix = tf.linalg.diag(tf_val)
         assign_op = modifiable_transition_matrix.assign(transition_matrix)
         with tf.control_dependencies([assign_op]):
-            tf.random.set_seed(seed)
             ll, ll_grad = routine(pf, initial_state, use_correction_term, observations_dataset, T,
-                                  modifiable_transition_matrix)
+                                  modifiable_transition_matrix, seed)
 
-        ll_eps_list = []
-        for n_val in range(mesh.shape[1]):
-            tf_val_eps = tf.constant([val[k] + (epsilon if k == n_val else 0.) for k in range(mesh.shape[1])],
-                                     dtype=tf.float32)
+        ll_eps_list = tf.TensorArray(tf.float32, size=mesh.shape[1])
+        for n_val in tf.range(mesh.shape[1]):
+            tf_val_eps = tf.tensor_scatter_nd_add(val, [[n_val]], [epsilon])
+
             transition_matrix = tf.linalg.diag(tf_val_eps)
             assign_op = modifiable_transition_matrix.assign(transition_matrix)
             with tf.control_dependencies([assign_op]):
-                tf.random.set_seed(seed)
                 ll_eps, _ = routine(pf, initial_state, use_correction_term, observations_dataset, T,
-                                    modifiable_transition_matrix)
-                ll_eps_list.append((ll_eps - ll) / epsilon)
+                                    modifiable_transition_matrix, seed)
+                ll_eps_list = ll_eps_list.write(tf.cast(n_val, dtype=tf.int32), (ll_eps - ll) / epsilon)
 
         likelihoods = likelihoods.write(tf.cast(i, tf.int32), ll)
-        gradients = gradients.write(tf.cast(i, tf.int32), tf.convert_to_tensor(ll_eps_list, dtype=tf.float32))
+        gradients = gradients.write(tf.cast(i, tf.int32), tf.convert_to_tensor(ll_eps_list.stack(), dtype=tf.float32))
+        i += 1
+        tf.print('\r', 'Step:', i, '/', mesh.shape[0], end='')
+
     return likelihoods.stack(), gradients.stack()
 
 
@@ -199,7 +201,7 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
     modifiable_transition_matrix = tf.Variable(transition_matrix, trainable=False)
     observation_matrix = tf.convert_to_tensor(observation_matrix)
     transition_covariance_chol = tf.linalg.cholesky(transition_covariance)
-    observation_covariance_chol = tf.linalg.cholesky(observation_matrix)
+    observation_covariance_chol = tf.linalg.cholesky(observation_covariance)
 
     initial_particles = np_random_state.normal(0., 1., [batch_size, n_particles, 2]).astype(np.float32)
     initial_state = State(initial_particles)
@@ -226,27 +228,29 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
 
 
 def fun_to_distribute(epsilon):
-    main(ResamplingMethodsEnum.REGULARIZED, resampling_neff=0.5, T=150, mesh_size=15,
-         resampling_kwargs=dict(epsilon=epsilon, scaling=0.5, convergence_threshold=1e-2), savefig=True, use_tqdm=False)
+    main(ResamplingMethodsEnum.REGULARIZED, resampling_neff=0.5, T=100, mesh_size=5,
+         resampling_kwargs=dict(epsilon=epsilon, scaling=0.75, convergence_threshold=1e-2), savefig=True, use_tqdm=False)
 
 
 # define flags
 
 FLAGS = flags.FLAGS
 
+flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.REGULARIZED, 'resampling_method')
 flags.DEFINE_float('epsilon', 0.5, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
-flags.DEFINE_float('scaling', 0.85, 'scaling')
-flags.DEFINE_float('convergence_threshold', 1e-4, 'convergence_threshold')
-flags.DEFINE_integer('n_particles', 100, 'n_particles', lower_bound=1)
+flags.DEFINE_float('scaling', 0.75, 'scaling')
+flags.DEFINE_float('convergence_threshold', 1e-3, 'convergence_threshold')
+flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)
 flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
 flags.DEFINE_integer('T', 150, 'T', lower_bound=1)
-flags.DEFINE_integer('mesh_size', 20, 'mesh_size', lower_bound=1)
+flags.DEFINE_integer('mesh_size', 10, 'mesh_size', lower_bound=1)
 flags.DEFINE_boolean('savefig', False, 'Save fig')
+flags.DEFINE_integer('seed', 25, 'seed')
 
 
 def flag_main(argb):
-    tf.random.set_seed(0)
+    print('resampling_method: {0}'.format(ResamplingMethodsEnum(FLAGS.resampling_method).name))
     print('epsilon: {0}'.format(FLAGS.epsilon))
     print('resampling_neff: {0}'.format(FLAGS.resampling_neff))
     print('convergence_threshold: {0}'.format(FLAGS.convergence_threshold))
@@ -257,7 +261,7 @@ def flag_main(argb):
     print('scaling: {0}'.format(FLAGS.scaling))
     print('max_iter: {0}'.format(FLAGS.max_iter))
 
-    main(ResamplingMethodsEnum.REGULARIZED,
+    main(FLAGS.resampling_method,
          resampling_neff=FLAGS.resampling_neff,
          T=FLAGS.T,
          mesh_size=FLAGS.mesh_size,
@@ -267,7 +271,8 @@ def flag_main(argb):
          resampling_kwargs=dict(epsilon=FLAGS.epsilon,
                                 scaling=FLAGS.scaling,
                                 convergence_threshold=FLAGS.convergence_threshold,
-                                max_iter=FLAGS.max_iter))
+                                max_iter=FLAGS.max_iter),
+         filter_seed=FLAGS.seed)
 
 
 if __name__ == '__main__':

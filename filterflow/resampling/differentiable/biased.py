@@ -10,7 +10,7 @@ from filterflow.resampling.differentiable.regularized_transport.plan import tran
 
 def apply_transport_matrix(state: State, transport_matrix: tf.Tensor, flags: tf.Tensor):
     float_n_particles = tf.cast(state.n_particles, float)
-    transported_particles = tf.einsum('ijk,ikm->ijm', transport_matrix, state.particles)
+    transported_particles = tf.linalg.matmul(transport_matrix, state.particles)
     uniform_log_weights = -tf.math.log(float_n_particles) * tf.ones_like(state.log_weights)
     uniform_weights = tf.ones_like(state.weights) / float_n_particles
 
@@ -22,7 +22,7 @@ def apply_transport_matrix(state: State, transport_matrix: tf.Tensor, flags: tf.
 
     for additional_state_variable in state.ADDITIONAL_STATE_VARIABLES:
         state_variable = getattr(state, additional_state_variable)
-        transported_state_variable = tf.einsum('ijk,ikm->ijm', transport_matrix, state.particles)
+        transported_state_variable = tf.linalg.matmul(transport_matrix, state.particles)
         additional_variables[additional_state_variable] = resample(state_variable, transported_state_variable, flags)
 
     return attr.evolve(state, particles=resampled_particles, weights=resampled_weights,

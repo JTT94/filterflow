@@ -188,5 +188,5 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
 
 
 if __name__ == '__main__':
-    main(ResamplingMethodsEnum.REGULARIZED, 0.5, T=125, n_particles=1000, batch_size=1,
+    main(ResamplingMethodsEnum.REGULARIZED, 0.5, T=125, n_particles=50, batch_size=1,
          resampling_kwargs=dict(epsilon=0.5, scaling=0.75, convergence_threshold=1e-4), filter_seed=2)
