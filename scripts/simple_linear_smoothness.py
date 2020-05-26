@@ -43,10 +43,10 @@ class ResamplingMethodsEnum(enum.IntEnum):
 
 
 @tf.function
-def routine(pf, initial_state, resampling_correction, observations_dataset, T, gradient_variables):
+def routine(pf, initial_state, resampling_correction, observations_dataset, T, gradient_variables, seed=None):
     with tf.GradientTape() as tape:
         tape.watch(gradient_variables)
-        final_state = pf(initial_state, observations_dataset, n_observations=T, return_final=True)
+        final_state = pf(initial_state, observations_dataset, n_observations=T, return_final=True, seed=seed)
         log_likelihood = tf.reduce_mean(final_state.log_likelihoods)
         correction_term = tf.reduce_mean(final_state.resampling_correction)
         if resampling_correction:
@@ -71,7 +71,7 @@ def get_surface(mesh, modifiable_transition_matrix, pf, initial_state, use_corre
             # sadly this can only be done in eager mode for the time being
             # (will be corrected with stateless operations in next tf versions)
             ll, ll_grad = routine(pf, initial_state, use_correction_term, observations_dataset, T,
-                                  modifiable_transition_matrix)
+                                  modifiable_transition_matrix, seed)
         likelihoods = likelihoods.write(tf.cast(i, tf.int32), ll)
         gradients = gradients.write(tf.cast(i, tf.int32), tf.linalg.diag_part(ll_grad))
     return likelihoods.stack(), gradients.stack()
