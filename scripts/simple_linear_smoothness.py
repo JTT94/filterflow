@@ -57,7 +57,6 @@ def routine(pf, initial_state, resampling_correction, observations_dataset, T, g
 
 
 # DO NOT DECORATE
-@tf.function
 def get_surface(mesh, modifiable_transition_matrix, pf, initial_state, use_correction_term, observations_dataset, T,
                 seed, use_tqdm=False):
     likelihoods = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[])
@@ -80,7 +79,6 @@ def get_surface(mesh, modifiable_transition_matrix, pf, initial_state, use_corre
 
 
 # DO NOT DECORATE
-@tf.function
 def get_surface_finite_difference(mesh, modifiable_transition_matrix, pf, initial_state, use_correction_term,
                                   observations_dataset, T, seed, epsilon=1e-2, use_tqdm=False):
     likelihoods = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[])
@@ -153,7 +151,7 @@ def plot_vector_field(mesh, mesh_size, data, grad_data, method_name, resampling_
 
 
 def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100, batch_size=1, n_particles=25,
-         data_seed=0, filter_seed=1, mesh_size=10, savefig=True, use_tqdm=False):
+         data_seed=0, filter_seed=1, mesh_size=10, savefig=True, use_tqdm=False, use_xla=False):
     transition_matrix = 0.5 * np.eye(2, dtype=np.float32)
     transition_covariance = 0.5 * np.eye(2, dtype=np.float32)
     observation_matrix = np.eye(2, dtype=np.float32)
@@ -215,12 +213,13 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
     mesh = np.asanyarray([(x, y) for x in x_linspace for y in y_linspace])
 
     if resampling_method.DIFFERENTIABLE:
-        log_likelihoods, gradients = get_surface(mesh, modifiable_transition_matrix, smc, initial_state, False,
-                                                 observation_dataset, T, filter_seed, use_tqdm)
+        get_method = tf.function(get_surface, experimental_compile=use_xla)
     else:
-        log_likelihoods, gradients = get_surface_finite_difference(mesh, modifiable_transition_matrix, smc,
-                                                                   initial_state, False, observation_dataset, T,
-                                                                   filter_seed, use_tqdm)
+        get_method = tf.function(get_surface, experimental_compile=use_xla)
+
+    log_likelihoods, gradients = get_method(mesh, modifiable_transition_matrix, smc,
+                                            initial_state, False, observation_dataset, T,
+                                            filter_seed, use_tqdm)
 
     plot_surface(mesh, mesh_size, log_likelihoods.numpy(), resampling_method_enum.name, resampling_kwargs, savefig)
     plot_vector_field(mesh, mesh_size, log_likelihoods.numpy(), gradients.numpy(), resampling_method_enum.name,
@@ -229,7 +228,8 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
 
 def fun_to_distribute(epsilon):
     main(ResamplingMethodsEnum.REGULARIZED, resampling_neff=0.5, T=100, mesh_size=5,
-         resampling_kwargs=dict(epsilon=epsilon, scaling=0.75, convergence_threshold=1e-2), savefig=True, use_tqdm=False)
+         resampling_kwargs=dict(epsilon=epsilon, scaling=0.75, convergence_threshold=1e-2), savefig=True,
+         use_tqdm=False)
 
 
 # define flags
@@ -247,6 +247,7 @@ flags.DEFINE_integer('T', 150, 'T', lower_bound=1)
 flags.DEFINE_integer('mesh_size', 10, 'mesh_size', lower_bound=1)
 flags.DEFINE_boolean('savefig', False, 'Save fig')
 flags.DEFINE_integer('seed', 25, 'seed')
+flags.DEFINE_boolean('use_xla', False, 'Use XLA (experimental)')
 
 
 def flag_main(argb):
@@ -260,6 +261,7 @@ def flag_main(argb):
     print('savefig: {0}'.format(FLAGS.savefig))
     print('scaling: {0}'.format(FLAGS.scaling))
     print('max_iter: {0}'.format(FLAGS.max_iter))
+    print('use_xla: {0}'.format(FLAGS.use_xla))
 
     main(FLAGS.resampling_method,
          resampling_neff=FLAGS.resampling_neff,
@@ -272,7 +274,8 @@ def flag_main(argb):
                                 scaling=FLAGS.scaling,
                                 convergence_threshold=FLAGS.convergence_threshold,
                                 max_iter=FLAGS.max_iter),
-         filter_seed=FLAGS.seed)
+         filter_seed=FLAGS.seed,
+         use_xla=FLAGS.use_xla)
 
 
 if __name__ == '__main__':
