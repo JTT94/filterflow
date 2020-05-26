@@ -151,7 +151,7 @@ def plot_vector_field(mesh, mesh_size, data, grad_data, method_name, resampling_
 def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100, batch_size=1, n_particles=25,
          data_seed=0, filter_seed=1, mesh_size=10, savefig=True, use_tqdm=False):
     transition_matrix = 0.5 * np.eye(2, dtype=np.float32)
-    transition_covariance = np.eye(2, dtype=np.float32)
+    transition_covariance = 0.5*np.eye(2, dtype=np.float32)
     observation_matrix = np.eye(2, dtype=np.float32)
     observation_covariance = 0.1 * np.eye(2, dtype=np.float32)
 
