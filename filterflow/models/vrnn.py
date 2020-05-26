@@ -137,7 +137,7 @@ class VRNNTransitionModel(TransitionModelBase):
         new_latent = proposed_state.particles
         return tf.reduce_sum(dist.log_prob(new_latent), axis=-1)
 
-    def sample(self, state: VRNNState, inputs: tf.Tensor):
+    def sample(self, state: VRNNState, inputs: tf.Tensor, seed=None):
         rnn_out, rnn_state, latent_encoded = self.run_rnn(state, inputs)
         dist = self.latent_dist(state, rnn_out)
         latent_state = dist.sample()
@@ -164,8 +164,8 @@ class VRNNProposalModel(ProposalModelBase):
         new_latent = proposed_state.particles
         return tf.reduce_sum(dist.log_prob(new_latent), axis=-1)
 
-    def propose(self, state: State, inputs: tf.Tensor, observation: tf.Tensor):
-        return self.sample(state, inputs)
+    def propose(self, state: State, inputs: tf.Tensor, observation: tf.Tensor, seed=None):
+        return self._transiton_model.sample(state, inputs, seed)
 
 
 class VRNNNormalObservationModel(ObservationModelBase):

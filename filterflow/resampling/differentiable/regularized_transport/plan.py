@@ -30,9 +30,6 @@ def transport_from_potentials(x, f, g, eps, logw, n):
     log_n = tf.math.log(float_n)
 
     cost_matrix = cost(x, x)
-    f_0 = tf.expand_dims(f[:, 0], -1)
-    f = f - f_0
-    g = g + f_0
     fg = tf.expand_dims(f, 2) + tf.expand_dims(g, 1)  # fg = f + g.T
     temp = fg - cost_matrix
     temp = temp / eps

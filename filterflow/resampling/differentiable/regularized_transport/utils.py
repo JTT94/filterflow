@@ -9,6 +9,7 @@ def _fillna(tensor):
 
 @tf.function
 def diameter(x, y):
+
     min_x = tf.math.reduce_min(x, [1, 2])
     max_x = tf.math.reduce_max(x, [1, 2])
 

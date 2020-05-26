@@ -20,7 +20,7 @@ class TestSinkhorn(tf.test.TestCase):
         self.np_epsilon = 0.5
         self.epsilon = tf.constant(self.np_epsilon)
 
-        self.threshold = tf.constant(1e-3)
+        self.threshold = tf.constant(1e-4)
         self.n_iter = tf.constant(100)
 
         self.np_x = np.random.uniform(-1., 1., [batch_size, n_particles, dimension]).astype(np.float32)
@@ -35,7 +35,7 @@ class TestSinkhorn(tf.test.TestCase):
         self.uniform_logw = tf.zeros_like(degenerate_weights) - tf.math.log(float(n_particles))
 
     def test_transport(self):
-        T_scaled = transport(self.x, self.degenerate_logw, self.epsilon, 0.75, self.threshold,
+        T_scaled = transport(self.x, self.degenerate_logw, self.epsilon, 0.95, self.threshold,
                              self.n_iter, self.n_particles)
 
         scale_np_x = np.max(np.std(self.np_x[0], axis=1))

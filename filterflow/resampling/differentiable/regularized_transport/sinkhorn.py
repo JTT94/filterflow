@@ -106,14 +106,18 @@ def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsil
                    a_x_init,
                    b_y_init,
                    continue_flag,
-                   epsilon_0],
-        back_prop=False)
+                   epsilon_0])
 
+    converged_a_y, converged_b_x, converged_a_x, converged_b_y, = tf.nest.map_structure(tf.stop_gradient,
+                                                                                        (converged_a_y,
+                                                                                         converged_b_x,
+                                                                                         converged_a_x,
+                                                                                         converged_b_y))
     epsilon_ = tf.reshape(epsilon, [-1, 1])
-    final_a_y = softmin(epsilon, cost_yx, log_alpha + tf.stop_gradient(converged_b_x) / epsilon_)
-    final_b_x = softmin(epsilon, cost_xy, log_beta + tf.stop_gradient(converged_a_y) / epsilon_)
-    final_a_x = softmin(epsilon, cost_xx, log_alpha + tf.stop_gradient(converged_a_x) / epsilon_)
-    final_b_y = softmin(epsilon, cost_yy, log_beta + tf.stop_gradient(converged_b_y) / epsilon_)
+    final_a_y = softmin(epsilon, cost_yx, log_alpha + converged_b_x / epsilon_)
+    final_b_x = softmin(epsilon, cost_xy, log_beta + converged_a_y / epsilon_)
+    final_a_x = softmin(epsilon, cost_xx, log_alpha + converged_a_x / epsilon_)
+    final_b_y = softmin(epsilon, cost_yy, log_beta + converged_b_y / epsilon_)
 
     return final_a_y, final_b_x, final_a_x, final_b_y, total_iter + 2
 

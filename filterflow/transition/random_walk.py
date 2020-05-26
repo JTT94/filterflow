@@ -17,6 +17,8 @@ class RandomWalkModel(TransitionModelBase):
             State of the filter at t-1
         :param inputs: tf.Tensor
             Input for transition model
+        :param seed: tf.Tensor
+            Seed for sampling
         :return: proposed State
         :rtype: State
         """

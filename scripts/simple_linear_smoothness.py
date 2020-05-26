@@ -42,7 +42,7 @@ class ResamplingMethodsEnum(enum.IntEnum):
     OPTIMIZED = 5
 
 
-#@tf.function
+@tf.function
 def routine(pf, initial_state, resampling_correction, observations_dataset, T, gradient_variables, seed=None):
     with tf.GradientTape() as tape:
         tape.watch(gradient_variables)
@@ -57,6 +57,7 @@ def routine(pf, initial_state, resampling_correction, observations_dataset, T, g
 
 
 # DO NOT DECORATE
+@tf.function
 def get_surface(mesh, modifiable_transition_matrix, pf, initial_state, use_correction_term, observations_dataset, T,
                 seed, use_tqdm=False):
     likelihoods = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[])
@@ -78,6 +79,7 @@ def get_surface(mesh, modifiable_transition_matrix, pf, initial_state, use_corre
 
 
 # DO NOT DECORATE
+@tf.function
 def get_surface_finite_difference(mesh, modifiable_transition_matrix, pf, initial_state, use_correction_term,
                                   observations_dataset, T, seed, epsilon=1e-3, use_tqdm=False):
     likelihoods = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[])
@@ -151,7 +153,7 @@ def plot_vector_field(mesh, mesh_size, data, grad_data, method_name, resampling_
 def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100, batch_size=1, n_particles=25,
          data_seed=0, filter_seed=1, mesh_size=10, savefig=True, use_tqdm=False):
     transition_matrix = 0.5 * np.eye(2, dtype=np.float32)
-    transition_covariance = 0.5*np.eye(2, dtype=np.float32)
+    transition_covariance = 0.5 * np.eye(2, dtype=np.float32)
     observation_matrix = np.eye(2, dtype=np.float32)
     observation_covariance = 0.1 * np.eye(2, dtype=np.float32)
 
@@ -242,6 +244,7 @@ flags.DEFINE_integer('T', 150, 'T', lower_bound=1)
 flags.DEFINE_integer('mesh_size', 20, 'mesh_size', lower_bound=1)
 flags.DEFINE_boolean('savefig', False, 'Save fig')
 
+
 def flag_main(argb):
     tf.random.set_seed(0)
     print('epsilon: {0}'.format(FLAGS.epsilon))
@@ -261,8 +264,8 @@ def flag_main(argb):
          n_particles=FLAGS.n_particles,
          savefig=FLAGS.savefig,
          use_tqdm=True,
-         resampling_kwargs=dict(epsilon=FLAGS.epsilon, 
-                                scaling=FLAGS.scaling, 
+         resampling_kwargs=dict(epsilon=FLAGS.epsilon,
+                                scaling=FLAGS.scaling,
                                 convergence_threshold=FLAGS.convergence_threshold,
                                 max_iter=FLAGS.max_iter))
 

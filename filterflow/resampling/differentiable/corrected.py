@@ -43,7 +43,7 @@ class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
         super(CorrectedRegularizedTransform, self).__init__(name=name)
 
     @tf.function
-    def apply(self, state: State, flags: tf.Tensor):
+    def apply(self, state: State, flags: tf.Tensor, seed=None):
         """ Resampling method
 
         :param state State

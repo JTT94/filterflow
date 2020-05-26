@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pykalman
 import tensorflow as tf
+from tensorflow_probability.python.internal import samplers
 from tqdm import tqdm
 
 tf.config.set_visible_devices([], 'GPU')
@@ -61,28 +62,35 @@ class ResamplingMethodsEnum(enum.IntEnum):
 
 
 @tf.function
-def run_smc(smc, state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts):
+def run_smc(smc, state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts, seed):
+    if seed is None:
+        temp_seed = tf.random.uniform((), 0, 2 ** 32, tf.int32)
+        seed, = samplers.split_seed(temp_seed, n=1, salt='init')
+    if tf.size(seed) == 0:
+        seed = tf.stack([seed, 0])
+
     iterator = iter(observations_dataset)
     for t in tf.range(T):
         mu_t = mu_ts[t]
         beta_t = beta_ts[t]
         sigma_t = tf.math.exp(log_sigma_ts[t])
+        seed, seed1, seed2 = samplers.split_seed(seed, n=3, salt='update')
         obs = iterator.get_next()
-        state = smc.update(state, obs, [mu_t, beta_t, sigma_t])
+        state = smc.update(state, obs, [mu_t, beta_t, sigma_t], seed1, seed2)
     res = tf.reduce_mean(state.log_likelihoods)
     return res
 
 
 @tf.function
-def routine(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts):
+def routine(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts, seed):
     with tf.GradientTape() as tape:
         tape.watch([mu_ts, beta_ts, log_sigma_ts])
-        log_likelihood = run_smc(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts)
+        log_likelihood = run_smc(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts, seed)
         res = -log_likelihood
     return res, tape.gradient(res, [mu_ts, beta_ts, log_sigma_ts])
 
 
-def get_gradient_descent_function():
+def get_gradient_descent_function(seed):
     # This is a trick because tensorflow doesn't allow you to create variables inside a decorated function
 
     @tf.function
@@ -94,10 +102,10 @@ def get_gradient_descent_function():
 
         with tf.control_dependencies(reset_operations):
             for i in tf.range(n_iter):
-                loss_value, grads = routine(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts)
+                loss_value, grads = routine(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts, seed)
                 loss = loss.write(tf.cast(i, tf.int32), loss_value)
                 optimizer.apply_gradients(zip(grads, variables))
-        final_log_likelihood = run_smc(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts)
+        final_log_likelihood = run_smc(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts, seed)
         loss = loss.write(tf.cast(n_iter, tf.int32), -final_log_likelihood)
         return [tf.convert_to_tensor(var) for var in variables], loss.stack()
 
@@ -105,11 +113,11 @@ def get_gradient_descent_function():
 
 
 def compare_learning_rates(pf, initial_state, observations_dataset, T, mu_ts, beta_ts, log_sigma_ts, initial_values,
-                           n_iter, optimizer_maker, learning_rates):
+                           n_iter, optimizer_maker, learning_rates, filter_seed):
     loss_profiles = []
     for learning_rate in tqdm(learning_rates):
         optimizer = optimizer_maker(learning_rate=learning_rate)
-        gradient_descent_function = get_gradient_descent_function()
+        gradient_descent_function = get_gradient_descent_function(filter_seed)
         final_variables, loss_profile = gradient_descent_function(pf, initial_state, observations_dataset, T, n_iter,
                                                                   optimizer, mu_ts, beta_ts, log_sigma_ts,
                                                                   initial_values)
@@ -142,7 +150,7 @@ def plot_variables(variables_df, filename, savefig):
 def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), resampling_kwargs=None,
          alpha=0.42, dx=10, dy=3, observation_covariance=0.1, dense=False,
          T=100, batch_size=1, n_particles=25,
-         data_seed=0, n_iter=50, savefig=False):
+         data_seed=0, n_iter=50, savefig=False, filter_seed=0):
     transition_matrix = get_transition_matrix(alpha, dx)
     transition_covariance = get_transition_covariance(dx)
     observation_matrix = get_observation_matrix(dx, dy, dense)
@@ -216,7 +224,7 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
     initial_values = [mu_ts_init, beta_ts_init, log_sigma_ts_init]
 
     losses = compare_learning_rates(smc, initial_state, observation_dataset, T, mu_ts, beta_ts, log_sigma_ts,
-                                    initial_values, n_iter, optimizer_maker, learning_rates)
+                                    initial_values, n_iter, optimizer_maker, learning_rates, filter_seed)
     losses_df = pd.DataFrame(np.stack(losses).T, columns=learning_rates)
     losses_df.columns.name = 'learning rate'
     losses_df.columns.epoch = 'epoch'
@@ -227,4 +235,4 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
 if __name__ == '__main__':
     learning_rates = np.logspace(-4., -2., 5, base=10).astype(np.float32)
     main(ResamplingMethodsEnum.REGULARIZED, 0.5, T=20, n_particles=4, batch_size=4, learning_rates=learning_rates,
-         n_iter=250, resampling_kwargs=dict(epsilon=0.5, scaling=0.75, convergence_threshold=1e-2))
+         n_iter=250, resampling_kwargs=dict(epsilon=0.75, scaling=0.75, convergence_threshold=1e-3), filter_seed=42, savefig=True)

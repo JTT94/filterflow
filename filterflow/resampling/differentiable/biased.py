@@ -52,7 +52,7 @@ class RegularisedTransform(ResamplerBase, metaclass=abc.ABCMeta):
         self.scaling = tf.cast(scaling, float)
         super(RegularisedTransform, self).__init__(name=name)
 
-    def apply(self, state: State, flags: tf.Tensor):
+    def apply(self, state: State, flags: tf.Tensor, seed=None):
         """ Resampling method
 
         :param state State

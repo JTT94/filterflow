@@ -36,10 +36,10 @@ class ResamplingMethodsEnum(enum.IntEnum):
 
 
 @tf.function
-def routine(pf, initial_state, resampling_correction, observations_dataset, T, gradient_variables):
+def routine(pf, initial_state, resampling_correction, observations_dataset, T, gradient_variables, seed):
     with tf.GradientTape() as tape:
         tape.watch(gradient_variables)
-        final_state = pf(initial_state, observations_dataset, n_observations=T, return_final=True)
+        final_state = pf(initial_state, observations_dataset, n_observations=T, return_final=True, seed=seed)
         log_likelihood = tf.reduce_mean(final_state.log_likelihoods)
         correction_term = tf.reduce_mean(final_state.resampling_correction)
         if resampling_correction:
@@ -50,29 +50,29 @@ def routine(pf, initial_state, resampling_correction, observations_dataset, T, g
 
 
 # DO NOT DECORATE
+@tf.function
 def values_and_gradient(x, modifiable_transition_matrix, pf, initial_state,
                         observations_dataset, T, seed):
     tf_val = tf.convert_to_tensor(x)
     transition_matrix = tf.linalg.diag(tf_val)
     assign_op = modifiable_transition_matrix.assign(transition_matrix)
     with tf.control_dependencies([assign_op]):
-        tf.random.set_seed(seed)
         # sadly this can only be done in eager mode for the time being
         # (will be corrected with stateless operations in next tf versions)
         ll, ll_grad = routine(pf, initial_state, False, observations_dataset, T,
-                              modifiable_transition_matrix)
+                              modifiable_transition_matrix, seed)
     return -ll, -tf.linalg.diag_part(ll_grad)
 
 
 # DO NOT DECORATE
+@tf.function
 def values_and_gradient_finite_diff(x, modifiable_transition_matrix, pf, initial_state, observations_dataset, T, seed,
                                     epsilon=1e-3):
     tf_val = tf.convert_to_tensor(x)
     transition_matrix = tf.linalg.diag(tf_val)
     assign_op = modifiable_transition_matrix.assign(transition_matrix)
     with tf.control_dependencies([assign_op]):
-        tf.random.set_seed(seed)
-        ll, _ = routine(pf, initial_state, False, observations_dataset, T, modifiable_transition_matrix)
+        ll, _ = routine(pf, initial_state, False, observations_dataset, T, modifiable_transition_matrix, seed=seed)
 
     ll_eps_list = []
     for n_val in range(len(x)):
@@ -80,20 +80,21 @@ def values_and_gradient_finite_diff(x, modifiable_transition_matrix, pf, initial
         transition_matrix = tf.linalg.diag(tf_val_eps)
         assign_op = modifiable_transition_matrix.assign(transition_matrix)
         with tf.control_dependencies([assign_op]):
-            tf.random.set_seed(seed)
             ll_eps, _ = routine(pf, initial_state, False, observations_dataset, T,
-                                modifiable_transition_matrix)
+                                modifiable_transition_matrix, seed=seed)
             ll_eps_list.append((ll_eps - ll) / epsilon)
     return -ll, -tf.convert_to_tensor(ll_eps_list)
 
 
+@tf.function
 def gradient_descent(loss_fun, x0, learning_rate, n_iter):
     loss = tf.TensorArray(dtype=tf.float32, size=n_iter + 1, dynamic_size=False)
     val = tf.identity(x0)
-    for i in tqdm.trange(n_iter):
+    for i in tf.range(n_iter):
         loss_val, gradient_val = loss_fun(val)
         loss = loss.write(tf.cast(i, tf.int32), loss_val)
         val -= learning_rate * gradient_val
+        tf.print('Step ', i + 1, '/', n_iter, end='\r')
     loss_val, gradient_val = loss_fun(val)
     loss = loss.write(tf.cast(n_iter, tf.int32), loss_val)
     return val, loss.stack()
@@ -182,9 +183,10 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
                                                              initial_state, observation_dataset, T,
                                                              filter_seed)
 
-    final_value, loss = gradient_descent(loss_fun, x0, learning_rate, n_iter)
+    final_value, loss = gradient_descent(tf.function(loss_fun), x0, learning_rate, n_iter)
     plot_loss(loss, final_value, resampling_method_enum.name, savefig)
 
 
 if __name__ == '__main__':
-    main(ResamplingMethodsEnum.SYSTEMATIC, 0.5, T=125, n_particles=100, batch_size=50, resampling_kwargs=dict())
+    main(ResamplingMethodsEnum.REGULARIZED, 0.5, T=125, n_particles=1000, batch_size=1,
+         resampling_kwargs=dict(epsilon=0.5, scaling=0.75, convergence_threshold=1e-4), filter_seed=2)

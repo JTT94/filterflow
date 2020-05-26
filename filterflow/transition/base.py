@@ -20,12 +20,14 @@ class TransitionModelBase(Module, metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    def sample(self, state: State, inputs: tf.Tensor):
+    def sample(self, state: State, inputs: tf.Tensor, seed=None):
         """Samples a new proposed state conditionally on prior state and some inputs
         :param state: State
             State of the filter at t-1
         :param inputs: tf.Tensor
             Input for transition model
+        :param seed: tf.Tensor
+            Input for distribution
         :return: proposed State
         :rtype: State
         """

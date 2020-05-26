@@ -8,7 +8,7 @@ from filterflow.base import State, Module
 class ProposalModelBase(Module, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
-    def propose(self, state: State, inputs: tf.Tensor, observation: tf.Tensor):
+    def propose(self, state: State, inputs: tf.Tensor, observation: tf.Tensor, seed=None):
         """Interface method for particle proposal
 
         :param state: State

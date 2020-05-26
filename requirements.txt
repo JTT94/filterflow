@@ -40,7 +40,7 @@ tensorboard==2.2.1
 tensorboard-plugin-wit==1.6.0.post3
 tensorflow==2.2.0
 tensorflow-estimator==2.2.0
-tensorflow-probability==0.10.0
+tfp-nightly==0.11.0.dev20200525
 termcolor==1.1.0
 tqdm==4.46.0
 urllib3==1.25.9

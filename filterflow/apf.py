@@ -22,7 +22,7 @@ class AuxiliaryParticleFilter(SMC):
 
     @tf.function
     def propose_and_weight(self, state: State, observation: tf.Tensor,
-                           inputs: tf.Tensor):
+                           inputs: tf.Tensor, seed=None):
         """
         :param state: State
             current state of the filter
@@ -34,7 +34,6 @@ class AuxiliaryParticleFilter(SMC):
         """
         float_n_particles = tf.cast(state.n_particles, float)
         proposed_state = self._proposal_model.propose(state, inputs, observation)
-
 
         log_weights = self._transition_model.loglikelihood(state, proposed_state, inputs)
         log_weights = log_weights + self._observation_model.loglikelihood(proposed_state, observation)

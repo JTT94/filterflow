@@ -40,10 +40,10 @@ class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
 
     @staticmethod
     @abc.abstractmethod
-    def _get_spacings(n_particles, batch_size):
+    def _get_spacings(n_particles, batch_size, seed):
         """Spacings variates to give for empirical CDF block selection"""
 
-    def apply(self, state: State, flags: tf.Tensor):
+    def apply(self, state: State, flags: tf.Tensor, seed=None):
         """ Resampling method
 
         :param state State
@@ -57,7 +57,7 @@ class StandardResamplerBase(ResamplerBase, metaclass=abc.ABCMeta):
         n_particles = state.n_particles
         # TODO: The real batch_size is the sum of flags. We shouldn't do more operations than we need...
 
-        spacings = self._get_spacings(n_particles, batch_size)
+        spacings = self._get_spacings(n_particles, batch_size, seed)
         # TODO: We should be able to get log spacings directly to always stay in log space.
         indices = _discrete_percentile_function(spacings, n_particles, self._on_log, state.weights,
                                                 state.log_weights)

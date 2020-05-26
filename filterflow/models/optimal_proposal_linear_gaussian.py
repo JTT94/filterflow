@@ -19,7 +19,7 @@ class LearnableProposalModel(ProposalModelBase):
                                                                         tf.ones(transition_matrix.shape[0]))
 
     @tf.function
-    def propose(self, state: State, inputs, _observation: tf.Tensor):
+    def propose(self, state: State, inputs, observation: tf.Tensor, seed=None):
         """See base class"""
         mu_t = inputs[0]
         beta_t = inputs[1]
@@ -30,7 +30,7 @@ class LearnableProposalModel(ProposalModelBase):
 
         scale = tfp.bijectors.ScaleMatvecDiag(sigma_t)
         scaled_rv = tfd.TransformedDistribution(self._standard_noise, bijector=scale)
-        proposed_particles = pushed_particles + scaled_rv.sample([state.batch_size, state.n_particles])
+        proposed_particles = pushed_particles + scaled_rv.sample([state.batch_size, state.n_particles], seed=seed)
         return attr.evolve(state, particles=proposed_particles)
 
     def loglikelihood(self, proposed_state: State, state: State, inputs: tf.Tensor, observation: tf.Tensor):

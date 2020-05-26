@@ -33,17 +33,19 @@ class LinearTransitionModel1d(TransitionModelBase):
         log_prob = self._noise.log_prob(diff)
         return tf.reshape(log_prob, [batch_size, n_particles])
 
-    def sample(self, state: State, inputs: tf.Tensor):
+    def sample(self, state: State, inputs: tf.Tensor, seed=None):
         """Samples a new proposed state conditionally on prior state and some inputs
         :param state: State
             State of the filter at t-1
         :param inputs: tf.Tensor
             Input for transition model
+        :param seed: tf.Tensor
+            Seed
         :return: proposed State
         :rtype: State
         """
         pushed_particles = self.push_particles(state.particles)
-        res = pushed_particles + self._noise.sample([state.batch_size, state.n_particles])
+        res = pushed_particles + self._noise.sample([state.batch_size, state.n_particles], seed=seed)
         return res
 
 class LinearTransitionModel(TransitionModelBase):
