@@ -232,7 +232,7 @@ def fun_to_distribute(epsilon):
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_float('epsilon', 0.75, 'epsilon')
+flags.DEFINE_float('epsilon', 0.5, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.9, 'scaling')
 flags.DEFINE_float('convergence_threshold', 1e-4, 'convergence_threshold')

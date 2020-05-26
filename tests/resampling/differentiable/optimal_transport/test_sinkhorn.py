@@ -18,7 +18,7 @@ class TestSinkhorn(tf.test.TestCase):
         self.batch_size = tf.constant(batch_size)
         self.dimension = tf.constant(dimension)
 
-        self.np_epsilon = 0.5
+        self.np_epsilon = 0.75
         self.epsilon = tf.constant(self.np_epsilon)
 
         self.threshold = tf.constant(1e-4)
@@ -82,20 +82,20 @@ class TestSinkhorn(tf.test.TestCase):
     def test_gradient_transport(self):
         @tf.function
         def fun_x(x):
-            transport_matrix = transport(x, self.degenerate_logw, self.epsilon, tf.constant(0.75), self.threshold,
+            transport_matrix = transport(x, self.degenerate_logw, self.epsilon, tf.constant(0.9), self.threshold,
                                          self.n_iter, self.n_particles)
-            return tf.math.reduce_std(tf.linalg.matmul(transport_matrix, x))
+            return tf.math.reduce_sum(tf.linalg.matmul(transport_matrix, x))
 
         @tf.function
         def fun_logw(logw):
-            logw = normalize(logw, 1, self.n_particles)
+            logw_norm = normalize(logw, 1, self.n_particles)
 
-            transport_matrix = transport(self.x, logw, self.epsilon, tf.constant(0.9),
+            transport_matrix = transport(self.x, logw_norm, self.epsilon, tf.constant(0.9),
                                          self.threshold, self.n_iter, self.n_particles)
-            return tf.math.reduce_std(tf.linalg.matmul(transport_matrix, self.x))
+            return tf.math.reduce_sum(tf.linalg.matmul(transport_matrix, self.x))
 
-        theoretical, numerical = tf.test.compute_gradient(fun_x, [self.x], delta=1e-4)
-        self.assertAllClose(theoretical[0], numerical[0], atol=1e-2)
+        theoretical, numerical = tf.test.compute_gradient(fun_x, [self.x], delta=1e-2)
+        self.assertAllClose(theoretical[0], numerical[0], atol=1e-2, rtol=1e-2)
 
-        theoretical, numerical = tf.test.compute_gradient(fun_logw, [self.degenerate_logw], delta=1e-4)
-        self.assertAllClose(theoretical[0], numerical[0], atol=1e-2)
+        theoretical, numerical = tf.test.compute_gradient(fun_logw, [self.degenerate_logw], delta=1e-1)
+        self.assertAllClose(theoretical[0], numerical[0], atol=1e-2, rtol=1e-2)

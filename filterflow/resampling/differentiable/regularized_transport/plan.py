@@ -66,10 +66,10 @@ def transport(x, logw, eps, scaling, threshold, max_iter, n):
     log_n = tf.math.log(float_n)
     uniform_log_weight = -log_n * tf.ones_like(logw)
     mean_ = tf.math.reduce_mean(x, 1, keepdims=True)
-    centered_x = x - tf.stop_gradient(mean_)
-    diameter_ = tf.reshape(tf.stop_gradient(diameter(centered_x, centered_x)), [-1, 1, 1])
+    centered_x = x - mean_
+    diameter_ = tf.reshape(diameter(centered_x, centered_x), [-1, 1, 1])
 
-    scaled_x = centered_x / diameter_
+    scaled_x = x  # centered_x / diameter_
 
     alpha, beta, _, _, _ = sinkhorn_potentials(logw, scaled_x, uniform_log_weight, scaled_x, eps, scaling, threshold,
                                                max_iter)
