@@ -42,7 +42,7 @@ class ResamplingMethodsEnum(enum.IntEnum):
     OPTIMIZED = 5
 
 
-@tf.function
+#@tf.function
 def routine(pf, initial_state, resampling_correction, observations_dataset, T, gradient_variables, seed=None):
     with tf.GradientTape() as tape:
         tape.watch(gradient_variables)
