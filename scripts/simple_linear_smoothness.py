@@ -232,15 +232,16 @@ def fun_to_distribute(epsilon):
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_float('epsilon', 0.5, 'epsilon')
+flags.DEFINE_float('epsilon', 0.75, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
-flags.DEFINE_float('scaling', 0.85, 'scaling')
+flags.DEFINE_float('scaling', 0.9, 'scaling')
 flags.DEFINE_float('convergence_threshold', 1e-4, 'convergence_threshold')
-flags.DEFINE_integer('n_particles', 100, 'n_particles', lower_bound=1)
+flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=1)
 flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
-flags.DEFINE_integer('T', 150, 'T', lower_bound=1)
-flags.DEFINE_integer('mesh_size', 20, 'mesh_size', lower_bound=1)
-flags.DEFINE_boolean('savefig', False, 'Save fig')
+flags.DEFINE_integer('T', 50, 'T', lower_bound=1)
+flags.DEFINE_integer('mesh_size', 10, 'mesh_size', lower_bound=1)
+flags.DEFINE_boolean('savefig', True, 'Save fig')
+flags.DEFINE_boolean('use_tqdm', True, 'Use TQDM')
 
 def flag_main(argb):
     print('epsilon: {0}'.format(FLAGS.epsilon))
@@ -259,6 +260,7 @@ def flag_main(argb):
          mesh_size=FLAGS.mesh_size,
          n_particles=FLAGS.n_particles,
          savefig=FLAGS.savefig,
+         use_tqdm=FLAGS.use_tqdm,
          resampling_kwargs=dict(epsilon=FLAGS.epsilon, 
                                 scaling=FLAGS.scaling, 
                                 convergence_threshold=FLAGS.convergence_threshold,

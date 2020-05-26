@@ -33,10 +33,10 @@ class SinkhornLoss(Loss):
 
     def __call__(self, log_w_x, w_x, x, log_w_y, w_y, y):
         if not self.symmetric:
-            a_y, b_x, _, _, _, _, _ = sinkhorn_potentials(log_w_x, x, log_w_y, y, self.epsilon, self.scaling,
+            a_y, b_x, _, _, _ = sinkhorn_potentials(log_w_x, x, log_w_y, y, self.epsilon, self.scaling,
                                                           self.convergence_threshold, self.max_iter)
             return _scal(w_x, b_x) + _scal(w_y, a_y)
         else:
-            a_y, b_x, a_x, b_y, _, _, _ = sinkhorn_potentials(log_w_x, x, log_w_y, y, self.epsilon, self.scaling,
+            a_y, b_x, a_x, b_y, _ = sinkhorn_potentials(log_w_x, x, log_w_y, y, self.epsilon, self.scaling,
                                                            self.convergence_threshold, self.max_iter)
             return _scal(w_x, b_x - a_x) + _scal(w_y, a_y - b_y)
