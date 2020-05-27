@@ -220,8 +220,8 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
 
     resampling_method_enum = ResamplingMethodsEnum(resampling_method_value)
 
-    x_linspace = np.linspace(0.25, 0.75, mesh_size).astype(np.float32)
-    y_linspace = np.linspace(0.25, 0.75, mesh_size).astype(np.float32)
+    x_linspace = np.linspace(0., 0.9, mesh_size).astype(np.float32)
+    y_linspace = np.linspace(0., 0.9, mesh_size).astype(np.float32)
     mesh = np.asanyarray([(x, y) for x in x_linspace for y in y_linspace])
 
     np_random_state = np.random.RandomState(seed=data_seed)
@@ -301,7 +301,7 @@ def fun_to_distribute(epsilon):
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.MULTINOMIAL, 'resampling_method')
+flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.KALMAN, 'resampling_method')
 flags.DEFINE_float('epsilon', 0.5, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.75, 'scaling')
@@ -310,7 +310,7 @@ flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)
 flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
 flags.DEFINE_integer('T', 150, 'T', lower_bound=1)
 flags.DEFINE_integer('mesh_size', 20, 'mesh_size', lower_bound=1)
-flags.DEFINE_boolean('savefig', False, 'Save fig')
+flags.DEFINE_boolean('savefig', True, 'Save fig')
 flags.DEFINE_integer('seed', 25, 'seed')
 flags.DEFINE_integer('data_seed', 123, 'data_seed')
 flags.DEFINE_boolean('use_xla', False, 'Use XLA (experimental)')

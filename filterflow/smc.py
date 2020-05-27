@@ -98,14 +98,17 @@ class SMC(Module):
         return attr.evolve(proposed_state, weights=tf.math.exp(normalized_log_weights),
                            log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)
 
-    @tf.function
+    @tf.function(experimental_implements=tf.autograph.experimental.Feature.EQUALITY_OPERATORS)
     def _return(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor,
                 inputs_series: tf.data.Dataset, seed=None):
+
         if seed is None:
             temp_seed = tf.random.uniform((), 0, 2 ** 16, tf.int32)
             seed, = samplers.split_seed(temp_seed, n=1, salt='propose_and_weight')
-        elif tf.size(seed) == 0:
-            seed = tf.stack([seed, 0])
+            paddings = tf.constant([[0, 0], [0, 0]])
+        else:
+            paddings = tf.stack([[0, 0], [0, 2-tf.size(seed)]])
+        seed = tf.squeeze(tf.pad(tf.reshape(seed, [1, -1]), paddings))
         # infer dtype
         dtype = initial_state.particles.dtype
 
