@@ -3,9 +3,11 @@ import os
 from absl import flags, app
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from scipy.optimize import minimize
 import tensorflow as tf
 from tensorflow_probability.python.internal.samplers import split_seed
+from tqdm import tqdm
 
 from filterflow.base import State
 from filterflow.models.simple_linear_gaussian import make_filter
@@ -194,7 +196,7 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None,
 
     fun = tf.function(loss_fun, experimental_compile=use_xla)
 
-    for observation_dataset, np_dataset in zip(data, np_data):
+    for observation_dataset, np_dataset in tqdm(zip(data, np_data), total=batch_data):
         final_value, loss = gradient_descent(fun, x0, observation_dataset, tf.constant(learning_rate),
                                              tf.constant(n_iter), tf.constant(filter_seed), tf.constant(change_seed))
         final_values.append(final_value.numpy())
@@ -205,9 +207,14 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None,
     final_values = np.vstack(final_values)
     kalman_params = np.vstack(kalman_params)
 
-    plt.hist(final_values - kalman_params, bins=10)
-    plt.show()
-    plot_loss(loss, final_value, resampling_method_enum.name, savefig)
+    df = pd.DataFrame(final_values - kalman_params, columns=[r'$\theta_1', r'$\theta_2'])
+    parameters_diff = np.mean(np.square(df), 0)
+    if savefig:
+        filename = f'theta_diff_{resampling_method_enum.name}_batch_size_{batch_size}_batch_data_{batch_data}.tex'
+        parameters_diff.to_latex(buf=os.path.join('./tables/', filename),
+                                 float_format='{:,.5f}'.format)
+    else:
+        print(parameters_diff.to_latex(float_format='{:,.5f}'.format))
 
 
 # define flags
@@ -215,21 +222,21 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None,
 FLAGS = flags.FLAGS
 
 flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.MULTINOMIAL, 'resampling_method')
-flags.DEFINE_float('epsilon', 0.25, 'epsilon')
+flags.DEFINE_float('epsilon', 0.5, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.75, 'scaling')
 flags.DEFINE_float('learning_rate', 1e-4, 'learning_rate', upper_bound=1e-1)
 flags.DEFINE_float('convergence_threshold', 1e-3, 'convergence_threshold')
 flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)
 flags.DEFINE_integer('batch_size', 4, 'batch_size', lower_bound=1)
-flags.DEFINE_integer('n_iter', 50, 'n_iter', lower_bound=10)
+flags.DEFINE_integer('n_iter', 100, 'n_iter', lower_bound=10)
 flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
 flags.DEFINE_integer('T', 150, 'T', lower_bound=1)
-flags.DEFINE_boolean('savefig', False, 'Save fig')
-flags.DEFINE_integer('batch_data', 10, 'Data samples', lower_bound=1)
+flags.DEFINE_boolean('savefig', True, 'Save fig')
+flags.DEFINE_integer('batch_data', 50, 'Data samples', lower_bound=1)
 flags.DEFINE_boolean('use_xla', False, 'Use XLA (experimental)')
-flags.DEFINE_boolean('assume_differentiable', False, 'Assume that all schemes are differentiable')
-flags.DEFINE_boolean('change_seed', False, 'change seed between each gradient descent step')
+flags.DEFINE_boolean('assume_differentiable', True, 'Assume that all schemes are differentiable')
+flags.DEFINE_boolean('change_seed', True, 'change seed between each gradient descent step')
 flags.DEFINE_integer('seed', 25, 'seed')
 
 
