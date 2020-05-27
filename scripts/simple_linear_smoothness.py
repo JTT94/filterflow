@@ -172,7 +172,11 @@ def plot_surface(mesh, mesh_size, data, method_name, resampling_kwargs, n_partic
     fig.tight_layout()
 
     if savefig:
-        filename = method_name + '_' + str(resampling_kwargs.get('epsilon', 'other') + '_N_' + str(n_particles))
+        filename = "{0}_{1}_{2}_N_{3}".format(method_name,
+                                              resampling_kwargs.get('epsilon'),
+                                              resampling_kwargs.get('other'),
+                                              n_particles)
+
         fig.savefig(os.path.join('./charts/', f'surface_{filename}.png'))
     else:
         fig.suptitle(f'surface_{method_name}')
@@ -190,7 +194,11 @@ def plot_vector_field(mesh, mesh_size, data, grad_data, method_name, resampling_
     ax.quiver(mesh[:, 0], mesh[:, 1], grad_data[:, 0], grad_data[:, 1])
     fig.tight_layout()
     if savefig:
-        filename = method_name + '_' + str(resampling_kwargs.get('epsilon', 'other')+ '_N_' + str(n_particles))
+        filename = "{0}_{1}_{2}_N_{3}".format(method_name,
+                                              resampling_kwargs.get('epsilon'),
+                                              resampling_kwargs.get('other'),
+                                              n_particles)
+
         fig.savefig(os.path.join('./charts/', f'field_{filename}.png'))
     else:
         fig.suptitle(f'field_{method_name}')
