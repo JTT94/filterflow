@@ -120,7 +120,6 @@ def kf_loglikelihood(kf, np_obs):
 
     def solve_triangular(a, b, trans=0, lower=False, unit_diagonal=False,
                          overwrite_b=False, debug=None, check_finite=True):
-
         a = getattr(a, 'data', a)
         b = getattr(b, 'data', b)
 
@@ -157,11 +156,10 @@ def get_surface_kf(mesh, kf, np_obs, epsilon, use_tqdm=False):
             ll_eps_list[n_val] = kf_loglikelihood(kf, np_obs)
         gradients[i] = (ll_eps_list - ll) / epsilon
 
-
     return likelihoods, gradients
 
 
-def plot_surface(mesh, mesh_size, data, method_name, resampling_kwargs, savefig):
+def plot_surface(mesh, mesh_size, data, method_name, resampling_kwargs, n_particles, savefig):
     seaborn.set()
     fig = plt.figure(figsize=(10, 10))
 
@@ -174,14 +172,14 @@ def plot_surface(mesh, mesh_size, data, method_name, resampling_kwargs, savefig)
     fig.tight_layout()
 
     if savefig:
-        filename = method_name + '_' + str(resampling_kwargs.get('epsilon', 'other'))
+        filename = method_name + '_' + str(resampling_kwargs.get('epsilon', 'other') + '_N_' + str(n_particles))
         fig.savefig(os.path.join('./charts/', f'surface_{filename}.png'))
     else:
         fig.suptitle(f'surface_{method_name}')
         plt.show()
 
 
-def plot_vector_field(mesh, mesh_size, data, grad_data, method_name, resampling_kwargs, savefig):
+def plot_vector_field(mesh, mesh_size, data, grad_data, method_name, resampling_kwargs, n_particles, savefig):
     fig, ax = plt.subplots(figsize=(10, 10))
 
     x = mesh[:, 0].reshape([mesh_size, mesh_size])
@@ -192,7 +190,7 @@ def plot_vector_field(mesh, mesh_size, data, grad_data, method_name, resampling_
     ax.quiver(mesh[:, 0], mesh[:, 1], grad_data[:, 0], grad_data[:, 1])
     fig.tight_layout()
     if savefig:
-        filename = method_name + '_' + str(resampling_kwargs.get('epsilon', 'other'))
+        filename = method_name + '_' + str(resampling_kwargs.get('epsilon', 'other')+ '_N_' + str(n_particles))
         fig.savefig(os.path.join('./charts/', f'field_{filename}.png'))
     else:
         fig.suptitle(f'field_{method_name}')
@@ -201,8 +199,9 @@ def plot_vector_field(mesh, mesh_size, data, grad_data, method_name, resampling_
 
 def kalman_main(kf, data, mesh, mesh_size, epsilon, use_tqdm, savefig):
     likelihoods, gradients = get_surface_kf(mesh, kf, data, epsilon, use_tqdm)
-    plot_surface(mesh, mesh_size, likelihoods, 'kalman', {}, savefig)
-    plot_vector_field(mesh, mesh_size, likelihoods, gradients, 'kalman', {}, savefig)
+    plot_surface(mesh, mesh_size, likelihoods, 'kalman', {}, None, savefig)
+    plot_vector_field(mesh, mesh_size, likelihoods, gradients, 'kalman', {}, None, savefig)
+
 
 def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100, batch_size=1, n_particles=25,
          data_seed=0, filter_seed=1, mesh_size=10, savefig=True, use_tqdm=False, use_xla=False):
@@ -279,9 +278,9 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
                                             initial_state, False, observation_dataset, T,
                                             filter_seed, use_tqdm)
 
-    plot_surface(mesh, mesh_size, log_likelihoods.numpy(), resampling_method_enum.name, resampling_kwargs, savefig)
+    plot_surface(mesh, mesh_size, log_likelihoods.numpy(), resampling_method_enum.name, resampling_kwargs, n_particles, savefig)
     plot_vector_field(mesh, mesh_size, log_likelihoods.numpy(), gradients.numpy(), resampling_method_enum.name,
-                      resampling_kwargs, savefig)
+                      resampling_kwargs, n_particles, savefig)
 
 
 def fun_to_distribute(epsilon):
