@@ -1,15 +1,15 @@
 import enum
 import os
 import sys
-import multiprocessing
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pykalman
 import seaborn
 import tensorflow as tf
-import tqdm
-from mpl_toolkits import mplot3d
 from absl import flags, app
+from mpl_toolkits import mplot3d
+from tqdm import tqdm
 
 sys.path.append("../")
 from filterflow.base import State
@@ -30,7 +30,7 @@ def get_data(transition_matrix, observation_matrix, transition_covariance, obser
         random_state = np.random.RandomState()
     kf = pykalman.KalmanFilter(transition_matrix, observation_matrix, transition_covariance, observation_covariance)
     sample = kf.sample(T, random_state=random_state)
-    return sample[1].data.astype(np.float32)
+    return sample[1].data.astype(np.float32), kf
 
 
 class ResamplingMethodsEnum(enum.IntEnum):
@@ -40,6 +40,7 @@ class ResamplingMethodsEnum(enum.IntEnum):
     REGULARIZED = 3
     VARIANCE_CORRECTED = 4
     OPTIMIZED = 5
+    KALMAN = 6
 
 
 @tf.function
@@ -112,6 +113,54 @@ def get_surface_finite_difference(mesh, modifiable_transition_matrix, pf, initia
     return likelihoods.stack(), gradients.stack()
 
 
+def kf_loglikelihood(kf, np_obs):
+    # There is an underlying bug in pykalman
+    from scipy.linalg import solve_triangular as sc_solve
+    from unittest import mock
+
+    def solve_triangular(a, b, trans=0, lower=False, unit_diagonal=False,
+                         overwrite_b=False, debug=None, check_finite=True):
+
+        a = getattr(a, 'data', a)
+        b = getattr(b, 'data', b)
+
+        return sc_solve(a, b, trans, lower, unit_diagonal,
+                        overwrite_b, debug, check_finite)
+
+    with mock.patch('pykalman.utils.linalg.solve_triangular') as m:
+        m.side_effect = solve_triangular
+        return kf.loglikelihood(np_obs)
+
+
+def get_surface_kf(mesh, kf, np_obs, epsilon, use_tqdm=False):
+    likelihoods = np.empty(mesh.shape[0])
+    gradients = np.empty(mesh.shape)
+
+    n_params = mesh.shape[1]
+
+    iterable = enumerate(mesh)
+    if use_tqdm:
+        iterable = tqdm(iterable, total=mesh.shape[0])
+
+    for i, val in iterable:
+        transition_matrix = np.diag(val)
+        kf.transition_matrices = transition_matrix
+
+        ll = kf_loglikelihood(kf, np_obs)
+        likelihoods[i] = ll
+        ll_eps_list = np.empty(n_params)
+        for n_val in range(n_params):
+            eps_increment = np.array([epsilon * (1 if i == n_val else 0) for i in range(n_params)])
+            val_eps = val + eps_increment
+            transition_matrix = np.diag(val_eps)
+            kf.transition_matrices = transition_matrix
+            ll_eps_list[n_val] = kf_loglikelihood(kf, np_obs)
+        gradients[i] = (ll_eps_list - ll) / epsilon
+
+
+    return likelihoods, gradients
+
+
 def plot_surface(mesh, mesh_size, data, method_name, resampling_kwargs, savefig):
     seaborn.set()
     fig = plt.figure(figsize=(10, 10))
@@ -150,6 +199,11 @@ def plot_vector_field(mesh, mesh_size, data, grad_data, method_name, resampling_
         plt.show()
 
 
+def kalman_main(kf, data, mesh, mesh_size, epsilon, use_tqdm, savefig):
+    likelihoods, gradients = get_surface_kf(mesh, kf, data, epsilon, use_tqdm)
+    plot_surface(mesh, mesh_size, likelihoods, 'kalman', {}, savefig)
+    plot_vector_field(mesh, mesh_size, likelihoods, gradients, 'kalman', {}, savefig)
+
 def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100, batch_size=1, n_particles=25,
          data_seed=0, filter_seed=1, mesh_size=10, savefig=True, use_tqdm=False, use_xla=False):
     transition_matrix = 0.5 * np.eye(2, dtype=np.float32)
@@ -159,9 +213,17 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
 
     resampling_method_enum = ResamplingMethodsEnum(resampling_method_value)
 
+    x_linspace = np.linspace(0.25, 0.75, mesh_size).astype(np.float32)
+    y_linspace = np.linspace(0.25, 0.75, mesh_size).astype(np.float32)
+    mesh = np.asanyarray([(x, y) for x in x_linspace for y in y_linspace])
+
     np_random_state = np.random.RandomState(seed=data_seed)
-    data = get_data(transition_matrix, observation_matrix, transition_covariance, observation_covariance, T,
-                    np_random_state)
+    data, kf = get_data(transition_matrix, observation_matrix, transition_covariance, observation_covariance, T,
+                        np_random_state)
+
+    if resampling_method_enum == ResamplingMethodsEnum.KALMAN:
+        return kalman_main(kf, data, mesh, mesh_size, 1e-2, use_tqdm, savefig)
+
     observation_dataset = tf.data.Dataset.from_tensor_slices(data)
 
     if resampling_kwargs is None:
@@ -208,14 +270,10 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
                       transition_covariance_chol,
                       resampling_method, resampling_criterion)
 
-    x_linspace = np.linspace(0.25, 0.75, mesh_size).astype(np.float32)
-    y_linspace = np.linspace(0.25, 0.75, mesh_size).astype(np.float32)
-    mesh = np.asanyarray([(x, y) for x in x_linspace for y in y_linspace])
-
     if resampling_method.DIFFERENTIABLE:
         get_method = tf.function(get_surface, experimental_compile=use_xla)
     else:
-        get_method = tf.function(get_surface, experimental_compile=use_xla)
+        get_method = tf.function(get_surface_finite_difference, experimental_compile=use_xla)
 
     log_likelihoods, gradients = get_method(mesh, modifiable_transition_matrix, smc,
                                             initial_state, False, observation_dataset, T,
@@ -236,7 +294,7 @@ def fun_to_distribute(epsilon):
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.REGULARIZED, 'resampling_method')
+flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.MULTINOMIAL, 'resampling_method')
 flags.DEFINE_float('epsilon', 0.5, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.75, 'scaling')
@@ -244,9 +302,10 @@ flags.DEFINE_float('convergence_threshold', 1e-3, 'convergence_threshold')
 flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)
 flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
 flags.DEFINE_integer('T', 150, 'T', lower_bound=1)
-flags.DEFINE_integer('mesh_size', 10, 'mesh_size', lower_bound=1)
+flags.DEFINE_integer('mesh_size', 20, 'mesh_size', lower_bound=1)
 flags.DEFINE_boolean('savefig', False, 'Save fig')
 flags.DEFINE_integer('seed', 25, 'seed')
+flags.DEFINE_integer('data_seed', 123, 'data_seed')
 flags.DEFINE_boolean('use_xla', False, 'Use XLA (experimental)')
 
 
@@ -260,6 +319,8 @@ def flag_main(argb):
     print('mesh_size: {0}'.format(FLAGS.mesh_size))
     print('savefig: {0}'.format(FLAGS.savefig))
     print('scaling: {0}'.format(FLAGS.scaling))
+    print('seed: {0}'.format(FLAGS.seed))
+    print('data_seed: {0}'.format(FLAGS.data_seed))
     print('max_iter: {0}'.format(FLAGS.max_iter))
     print('use_xla: {0}'.format(FLAGS.use_xla))
 
@@ -275,6 +336,7 @@ def flag_main(argb):
                                 convergence_threshold=FLAGS.convergence_threshold,
                                 max_iter=FLAGS.max_iter),
          filter_seed=FLAGS.seed,
+         data_seed=FLAGS.data_seed,
          use_xla=FLAGS.use_xla)
 
 

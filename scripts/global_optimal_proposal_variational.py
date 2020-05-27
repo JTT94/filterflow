@@ -92,7 +92,7 @@ def compare_learning_rates(pf, initial_state, observations_dataset, T, mu, beta,
 def plot_losses(loss_profiles_df, filename, savefig, dx, dy, dense, T):
     fig, ax = plt.subplots(figsize=(5, 5))
     loss_profiles_df.style.float_format = '${:,.1f}'.format
-    loss_profiles_df.plot(ax=ax, legend=False)
+    (-loss_profiles_df/T).plot(ax=ax, legend=False)
 
     # ax.set_ylim(250, 700)
     ax.legend()
@@ -119,7 +119,7 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
          alpha=0.42, dx=10, dy=3, observation_covariance=1., dense=False, T=20, batch_size=1, n_particles=25,
          data_seed=0, n_iter=50, savefig=False, filter_seed=0, use_xla=False):
     transition_matrix = get_transition_matrix(alpha, dx)
-    transition_covariance = 0.1 * get_transition_covariance(dx)
+    transition_covariance = get_transition_covariance(dx)
     observation_matrix = get_observation_matrix(dx, dy, dense)
     observation_covariance = get_observation_covariance(observation_covariance, dy)
 
@@ -202,21 +202,21 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.REGULARIZED, 'resampling_method')
+flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.MULTINOMIAL, 'resampling_method')
 flags.DEFINE_float('epsilon', 0.5, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.75, 'scaling')
-flags.DEFINE_float('log_learning_rate_min', -6, 'log_learning_rate_min')
-flags.DEFINE_float('log_learning_rate_max', -3, 'log_learning_rate_max')
+flags.DEFINE_float('log_learning_rate_min', -5, 'log_learning_rate_min')
+flags.DEFINE_float('log_learning_rate_max', -2.5, 'log_learning_rate_max')
 flags.DEFINE_integer('n_learning_rates', 4, 'log_learning_rate_max')
 flags.DEFINE_float('convergence_threshold', 1e-3, 'convergence_threshold')
-flags.DEFINE_integer('n_particles', 10, 'n_particles', lower_bound=4)
-flags.DEFINE_integer('batch_size', 1, 'batch_size', lower_bound=1)
-flags.DEFINE_integer('n_iter', 100, 'n_iter', lower_bound=10)
+flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)
+flags.DEFINE_integer('batch_size', 4, 'batch_size', lower_bound=1)
+flags.DEFINE_integer('n_iter', 150, 'n_iter', lower_bound=10)
 flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
 flags.DEFINE_integer('dx', 5, 'dx', lower_bound=1)
 flags.DEFINE_integer('dy', 5, 'dy', lower_bound=1)
-flags.DEFINE_integer('T', 20, 'T', lower_bound=1)
+flags.DEFINE_integer('T', 100, 'T', lower_bound=1)
 flags.DEFINE_boolean('savefig', True, 'Save fig')
 flags.DEFINE_boolean('use_xla', False, 'Use XLA (experimental)')
 flags.DEFINE_boolean('dense', False, 'dense')

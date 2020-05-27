@@ -90,15 +90,15 @@ def values_and_gradient_finite_diff(x, modifiable_transition_matrix, pf, initial
 
 
 @tf.function
-def gradient_descent(loss_fun, x0, learning_rate, n_iter):
+def gradient_descent(loss_fun, x0, observation_dataset, learning_rate, n_iter):
     loss = tf.TensorArray(dtype=tf.float32, size=n_iter + 1, dynamic_size=False)
     val = tf.identity(x0)
     for i in tf.range(n_iter):
-        loss_val, gradient_val = loss_fun(val)
+        loss_val, gradient_val = loss_fun(val, observation_dataset)
         loss = loss.write(tf.cast(i, tf.int32), loss_val)
         val -= learning_rate * gradient_val
         tf.print('\rStep ', i + 1, '/', n_iter, end='')
-    loss_val, gradient_val = loss_fun(val)
+    loss_val, gradient_val = loss_fun(val, observation_dataset)
     loss = loss.write(tf.cast(n_iter, tf.int32), loss_val)
     return val, loss.stack()
 
@@ -118,7 +118,7 @@ def plot_loss(data, final_val, filename, savefig):
 
 
 def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100, batch_size=1, n_particles=25,
-         data_seed=0, filter_seed=1, learning_rate=0.001, n_iter=50, savefig=False, use_xla=False):
+         data_seed=0, filter_seed=1, learning_rate=0.001, n_iter=50, savefig=False, use_xla=False, batch_data=1):
     transition_matrix = 0.5 * np.eye(2, dtype=np.float32)
     transition_covariance = np.eye(2, dtype=np.float32)
     observation_matrix = np.eye(2, dtype=np.float32)
@@ -127,9 +127,12 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
     resampling_method_enum = ResamplingMethodsEnum(resampling_method_value)
 
     np_random_state = np.random.RandomState(seed=data_seed)
-    data = get_data(transition_matrix, observation_matrix, transition_covariance, observation_covariance, T,
-                    np_random_state)
-    observation_dataset = tf.data.Dataset.from_tensor_slices(data)
+    data = []
+
+    for _ in range(batch_data):
+        a_data = get_data(transition_matrix, observation_matrix, transition_covariance, observation_covariance, T,
+                          np_random_state)
+        data.append(tf.data.Dataset.from_tensor_slices(a_data))
 
     if resampling_kwargs is None:
         resampling_kwargs = {}
@@ -178,23 +181,32 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
     x0 = tf.constant([0.25, 0.25])
 
     if resampling_method.DIFFERENTIABLE:
-        loss_fun = lambda x: values_and_gradient(x, modifiable_transition_matrix, smc,
-                                                 initial_state, observation_dataset, T,
-                                                 filter_seed)
+        loss_fun = lambda x, observation_dataset: values_and_gradient(x, modifiable_transition_matrix, smc,
+                                                                      initial_state, observation_dataset, T,
+                                                                      filter_seed)
     else:
-        loss_fun = lambda x: values_and_gradient_finite_diff(x, modifiable_transition_matrix, smc,
-                                                             initial_state, observation_dataset, T,
-                                                             filter_seed)
+        loss_fun = lambda x, observation_dataset: values_and_gradient_finite_diff(x, modifiable_transition_matrix, smc,
+                                                                                  initial_state, observation_dataset, T,
+                                                                                  filter_seed)
 
-    final_value, loss = gradient_descent(tf.function(loss_fun, experimental_compile=use_xla), x0, learning_rate, n_iter)
-    plot_loss(loss, final_value, resampling_method_enum.name, savefig)
+    final_values = []
+    losses = []
+    for observation_dataset in data:
+        final_value, loss = gradient_descent(tf.function(loss_fun, experimental_compile=use_xla), x0, observation_dataset, learning_rate, n_iter)
+        final_values.append(final_value.numpy())
+        losses.append(loss.numpy())
+
+    plt.hist(np.vstack(final_values), bins=10)
+    plt.show()
+    # plt.plot(losses)
+    # plot_loss(loss, final_value, resampling_method_enum.name, savefig)
 
 
 # define flags
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.REGULARIZED, 'resampling_method')
+flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.MULTINOMIAL, 'resampling_method')
 flags.DEFINE_float('epsilon', 0.25, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.75, 'scaling')
@@ -206,6 +218,7 @@ flags.DEFINE_integer('n_iter', 50, 'n_iter', lower_bound=10)
 flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
 flags.DEFINE_integer('T', 150, 'T', lower_bound=1)
 flags.DEFINE_boolean('savefig', False, 'Save fig')
+flags.DEFINE_integer('batch_data', 100, 'Data samples', lower_bound=1)
 flags.DEFINE_boolean('use_xla', False, 'Use XLA (experimental)')
 flags.DEFINE_integer('seed', 25, 'seed')
 
@@ -224,6 +237,7 @@ def flag_main(argb):
     print('max_iter: {0}'.format(FLAGS.max_iter))
     print('learning_rate: {0}'.format(FLAGS.learning_rate))
     print('use_xla: {0}'.format(FLAGS.use_xla))
+    print('batch_data: {0}'.format(FLAGS.batch_data))
 
     main(FLAGS.resampling_method,
          resampling_neff=FLAGS.resampling_neff,
@@ -238,9 +252,9 @@ def flag_main(argb):
                                 convergence_threshold=FLAGS.convergence_threshold,
                                 max_iter=FLAGS.max_iter),
          filter_seed=FLAGS.seed,
-         use_xla=FLAGS.use_xla)
+         use_xla=FLAGS.use_xla,
+         batch_data =FLAGS.batch_data)
 
 
 if __name__ == '__main__':
     app.run(flag_main)
-
