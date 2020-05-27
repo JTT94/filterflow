@@ -146,15 +146,6 @@ def main(resampling_method_value,
     observation_dataset = tf.data.Dataset.from_tensor_slices(targets_tensor)
     inputs_data = tf.data.Dataset.from_tensor_slices(inputs_tensor)
 
-    inputs_iter = iter(inputs_data)
-    for i in range(200):
-        inp = inputs_iter.get_next()
-        if i >0:
-            print(inp==prev)
-        prev = inp
-        
-        print(inp==prev)
-
     # get resampling method
     resampling_method_enum = ResamplingMethodsEnum(resampling_method_value)
 
