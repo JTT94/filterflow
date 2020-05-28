@@ -17,19 +17,19 @@ class ResamplingCriterionBase(Module, metaclass=abc.ABCMeta):
         """
 
 
-def _neff(tensor, assume_normalized: bool, is_log: bool, threshold: float) -> tf.Tensor:
+def _neff(tensor, assume_normalized: bool, is_log: bool, threshold: float):
     if is_log:
         if assume_normalized:
             log_neff = -tf.reduce_logsumexp(2 * tensor, 1)
         else:
             log_neff = 2 * tf.reduce_logsumexp(tensor, 1) - tf.reduce_logsumexp(2 * tensor, 1)
-        return log_neff <= tf.math.log(threshold)
+        return log_neff <= tf.math.log(threshold), tf.exp(log_neff)
     else:
         if assume_normalized:
             neff = 1 / tf.reduce_sum(tensor ** 2, 1)
         else:
             neff = tf.reduce_sum(tensor, 1) ** 2 / tf.reduce_sum(tensor ** 2, 1)
-    return neff <= threshold
+    return neff <= threshold, neff
 
 
 class NeffCriterion(ResamplingCriterionBase):
@@ -50,7 +50,7 @@ class NeffCriterion(ResamplingCriterionBase):
 
         :param state: State
             current state
-        :return: mask of booleans
+        :return: mask of booleans, efficient sample size prior resampling
         :rtype tf.Tensor
         """
         threshold = self._threshold if not self._is_relative else tf.cast(state.n_particles, float) * self._threshold
@@ -63,10 +63,10 @@ class NeffCriterion(ResamplingCriterionBase):
 class AlwaysResample(ResamplingCriterionBase):
 
     def apply(self, state: State):
-        return True
+        return tf.ones(state.batch_size, dtype=tf.bool),
 
 
 class NeverResample(ResamplingCriterionBase):
 
     def apply(self, state: State):
-        return False
+        return tf.zeros(state.batch_size, dtype=tf.bool)

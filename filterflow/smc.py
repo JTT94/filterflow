@@ -46,17 +46,23 @@ class SMC(Module):
             inputs for the observation_model
         :return: Updated weights
         """
+        t = state.t
+        float_t = tf.cast(t, tf.float32)
+        float_t_1 = float_t + 1.
         if seed1 is None or seed2 is None:
-            temp_seed = tf.random.uniform((), 0, 2 ** 32, tf.int32)
+            temp_seed = tf.random.uniform((), 0, 2 ** 16, tf.int32)
             seed1, seed2 = samplers.split_seed(temp_seed, n=2, salt='propose_and_weight')
-        # check for if resampling is required
-        resampling_flag = self._resampling_criterion.apply(state)
+        # check if resampling is required
+        resampling_flag, ess = self._resampling_criterion.apply(state)
+        # update running average efficient sample size
+        state = attr.evolve(state, ess=ess / float_t_1 + state.ess * (float_t / float_t_1))
         # perform resampling
         resampled_state = self._resampling_method.apply(state, resampling_flag, seed1)
         # perform sequential IS step
         new_state = self.propose_and_weight(resampled_state, observation, inputs, seed2)
         new_state = self._resampling_correction_term(resampling_flag, new_state, state, observation, inputs)
-        return new_state
+        # increment t
+        return attr.evolve(new_state, t=t + 1)
 
     @tf.function
     def _resampling_correction_term(self, resampling_flag: tf.Tensor, new_state: State, prior_state: State,
@@ -107,7 +113,7 @@ class SMC(Module):
             seed, = samplers.split_seed(temp_seed, n=1, salt='propose_and_weight')
             paddings = tf.constant([[0, 0], [0, 0]])
         else:
-            paddings = tf.stack([[0, 0], [0, 2-tf.size(seed)]])
+            paddings = tf.stack([[0, 0], [0, 2 - tf.size(seed)]])
         seed = tf.squeeze(tf.pad(tf.reshape(seed, [1, -1]), paddings))
         # infer dtype
         dtype = initial_state.particles.dtype

@@ -28,22 +28,22 @@ class TestNeffCriterion(tf.test.TestCase):
         self.neff_instance = NeffCriterion(0.5, True, False, True)
 
     def test_neff_normalized(self):
-        flag = _neff(self.weights, True, False, 0.5 * 3)
-        flag_log = _neff(self.log_weights, True, True, 0.5 * 3)
+        flag, _ = _neff(self.weights, True, False, 0.5 * 3)
+        flag_log, _ = _neff(self.log_weights, True, True, 0.5 * 3)
 
         self.assertAllEqual(flag, flag_log)
         self.assertAllEqual(flag, [False, True])
 
     def test_neff_unnormalized(self):
-        flag = _neff(self._scaled_weights, False, False, 0.5 * 3)
-        flag_log = _neff(self._scaled_log_weights, False, True, 0.5 * 3)
+        flag, _ = _neff(self._scaled_weights, False, False, 0.5 * 3)
+        flag_log, _ = _neff(self._scaled_log_weights, False, True, 0.5 * 3)
 
         self.assertAllEqual(flag, flag_log)
         self.assertAllEqual(flag, [False, True])
 
     def test_neff(self):
-        log_flags = self.neff_log_instance.apply(self.state)
-        flags = self.neff_instance.apply(self.state)
+        log_flags, _ = self.neff_log_instance.apply(self.state)
+        flags, _ = self.neff_instance.apply(self.state)
 
         self.assertAllEqual(log_flags, flags)
         self.assertAllEqual(flags, [False, True])

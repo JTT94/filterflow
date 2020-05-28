@@ -40,16 +40,17 @@ def run_smc(smc, state, observations_dataset, T, mu, beta, log_sigma, seed):
         obs = iterator.get_next()
         state = smc.update(state, obs, [mu, beta, sigma], seed1, seed2)
     res = tf.reduce_mean(state.log_likelihoods)
-    return res
+    ess = tf.reduce_mean(state.ess)
+    return res, ess
 
 
 @tf.function
 def routine(pf, initial_state, observations_dataset, T, mu, beta, log_sigma, seed):
     with tf.GradientTape() as tape:
         tape.watch([mu, beta, log_sigma])
-        log_likelihood = run_smc(pf, initial_state, observations_dataset, T, mu, beta, log_sigma, seed)
+        log_likelihood, ess = run_smc(pf, initial_state, observations_dataset, T, mu, beta, log_sigma, seed)
         res = -log_likelihood
-    return res, tape.gradient(res, [mu, beta, log_sigma])
+    return res, tape.gradient(res, [mu, beta, log_sigma]), ess
 
 
 def get_gradient_descent_function(seed):
@@ -59,17 +60,18 @@ def get_gradient_descent_function(seed):
                          initial_values):
         variables = [mu, beta, log_sigma]
         reset_operations = [k.assign(v) for k, v in zip(variables, initial_values)]
-        loss = tf.TensorArray(dtype=tf.float32, size=n_iter + 1, dynamic_size=False)
+        loss = tf.TensorArray(dtype=tf.float32, size=n_iter, dynamic_size=False)
+        ess = tf.TensorArray(dtype=tf.float32, size=n_iter, dynamic_size=False)
 
         with tf.control_dependencies(reset_operations):
             for i in tf.range(n_iter):
-                loss_value, grads = routine(pf, initial_state, observations_dataset, T, mu, beta, log_sigma,
-                                            seed if seed is not None else i)
+                loss_value, grads, average_ess = routine(pf, initial_state, observations_dataset, T, mu, beta,
+                                                         log_sigma, seed if seed is not None else i)
                 loss = loss.write(tf.cast(i, tf.int32), loss_value)
+                ess = ess.write(tf.cast(i, tf.int32), average_ess)
                 optimizer.apply_gradients(zip(grads, variables))
-        final_log_likelihood = run_smc(pf, initial_state, observations_dataset, T, mu, beta, log_sigma, seed)
-        loss = loss.write(tf.cast(n_iter, tf.int32), -final_log_likelihood)
-        return [tf.convert_to_tensor(var) for var in variables], loss.stack()
+
+        return [tf.convert_to_tensor(var) for var in variables], loss.stack(), ess.stack()
 
     return gradient_descent
 
@@ -77,28 +79,49 @@ def get_gradient_descent_function(seed):
 def compare_learning_rates(pf, initial_state, observations_dataset, T, mu, beta, log_sigma, initial_values,
                            n_iter, optimizer_maker, learning_rates, filter_seed, use_xla):
     loss_profiles = []
+    ess_profiles = []
     for learning_rate in tqdm(learning_rates):
         optimizer = optimizer_maker(learning_rate=learning_rate)
         gradient_descent_function = tf.function(get_gradient_descent_function(filter_seed),
                                                 experimental_compile=use_xla)
-        final_variables, loss_profile = gradient_descent_function(pf, initial_state, observations_dataset, T, n_iter,
-                                                                  optimizer, mu, beta, log_sigma,
-                                                                  initial_values)
+        final_variables, loss_profile, ess_profile = gradient_descent_function(pf, initial_state, observations_dataset,
+                                                                               T, n_iter,
+                                                                               optimizer, mu, beta, log_sigma,
+                                                                               initial_values)
         loss_profiles.append(loss_profile.numpy() / T)
-
-    return loss_profiles
+        ess_profiles.append(ess_profile.numpy())
+    return loss_profiles, ess_profiles
 
 
 def plot_losses(loss_profiles_df, filename, savefig, dx, dy, dense, T):
     fig, ax = plt.subplots(figsize=(5, 5))
     loss_profiles_df.style.float_format = '${:,.1f}'.format
-    (-loss_profiles_df/T).plot(ax=ax, legend=False)
+    (-loss_profiles_df / T).plot(ax=ax, legend=False)
 
     # ax.set_ylim(250, 700)
     ax.legend()
     fig.tight_layout()
     if savefig:
-        fig.savefig(os.path.join('./charts/', f'global_variational_different_lr_loss_{filename}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}.png'))
+        fig.savefig(os.path.join('./charts/',
+                                 f'global_variational_different_lr_loss_{filename}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}.png'))
+    else:
+        fig.suptitle(f'variational_different_loss_{filename}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}')
+        plt.show()
+
+
+def plot_losses_vs_ess(loss_profiles_df, ess_profiles_df, filename, savefig, dx, dy, dense, T):
+    fig, ax = plt.subplots(figsize=(5, 5))
+    loss_profiles_df.style.float_format = '${:,.1f}'.format
+    (-loss_profiles_df / T).plot(ax=ax, legend=False)
+
+    ax1 = ax.twinx()
+    loss_profiles_df.plot(ax=ax1, legend=False)
+
+    ax.legend()
+    fig.tight_layout()
+    if savefig:
+        fig.savefig(os.path.join('./charts/',
+                                 f'global_variational_different_lr_loss_{filename}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}.png'))
     else:
         fig.suptitle(f'variational_different_loss_{filename}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}')
         plt.show()
@@ -190,14 +213,21 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
 
     initial_values = [mu_init, beta_init, log_sigma_init]
 
-    losses = compare_learning_rates(smc, initial_state, observation_dataset, T, mu, beta, log_sigma,
-                                    initial_values, n_iter, optimizer_maker, learning_rates, filter_seed, use_xla)
+    losses, ess_profiles = compare_learning_rates(smc, initial_state, observation_dataset, T, mu, beta, log_sigma,
+                                                  initial_values, n_iter, optimizer_maker, learning_rates, filter_seed,
+                                                  use_xla)
 
     losses_df = pd.DataFrame(np.stack(losses).T, columns=np.log10(learning_rates))
+    ess_df = pd.DataFrame(np.stack(ess_profiles).T, columns=np.log10(learning_rates))
+
     losses_df.columns.name = 'log learning rate'
     losses_df.columns.epoch = 'epoch'
 
+    ess_df.columns.name = 'log learning rate'
+    ess_df.columns.epoch = 'epoch'
+
     plot_losses(losses_df, resampling_method_enum.name, savefig, dx, dy, dense, T)
+    plot_losses_vs_ess(losses_df, ess_df, resampling_method_enum.name, savefig, dx, dy, dense, T)
 
 
 FLAGS = flags.FLAGS
@@ -208,7 +238,7 @@ flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.75, 'scaling')
 flags.DEFINE_float('log_learning_rate_min', -5, 'log_learning_rate_min')
 flags.DEFINE_float('log_learning_rate_max', -2.5, 'log_learning_rate_max')
-flags.DEFINE_integer('n_learning_rates', 4, 'log_learning_rate_max')
+flags.DEFINE_integer('n_learning_rates', 2, 'log_learning_rate_max')
 flags.DEFINE_float('convergence_threshold', 1e-3, 'convergence_threshold')
 flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)
 flags.DEFINE_integer('batch_size', 4, 'batch_size', lower_bound=1)
@@ -216,7 +246,7 @@ flags.DEFINE_integer('n_iter', 150, 'n_iter', lower_bound=10)
 flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
 flags.DEFINE_integer('dx', 5, 'dx', lower_bound=1)
 flags.DEFINE_integer('dy', 5, 'dy', lower_bound=1)
-flags.DEFINE_integer('T', 100, 'T', lower_bound=1)
+flags.DEFINE_integer('T', 150, 'T', lower_bound=1)
 flags.DEFINE_boolean('savefig', True, 'Save fig')
 flags.DEFINE_boolean('use_xla', False, 'Use XLA (experimental)')
 flags.DEFINE_boolean('dense', False, 'dense')
