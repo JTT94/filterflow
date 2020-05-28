@@ -40,6 +40,7 @@ def _non_scalar_validator(_instance, attribute, value, ndim=None):
 _dim_3_validator = partial(_non_scalar_validator, ndim=3)
 _dim_2_validator = partial(_non_scalar_validator, ndim=2)
 _dim_1_validator = partial(_non_scalar_validator, ndim=1)
+_dim_0_validator = partial(_non_scalar_validator, ndim=0)
 
 
 @attr.s(frozen=True)
@@ -47,6 +48,7 @@ class State:
     """Particle Filter State
     State encapsulates the information about the particle filter current state.
     """
+    # TODO: tf.Assert shapes
     ADDITIONAL_STATE_VARIABLES = ()
 
     particles = attr.ib(validator=_dim_3_validator)
@@ -55,6 +57,11 @@ class State:
     log_likelihoods = attr.ib(validator=_dim_1_validator, default=None)
     ancestor_indices = attr.ib(validator=attr.validators.optional(_dim_2_validator), default=None)
     resampling_correction = attr.ib(validator=attr.validators.optional(_dim_1_validator), default=None)
+    t = attr.ib(validator=attr.validators.optional(_dim_0_validator), default=None)
+
+    # These are measures to understand the impact of regularization on the particles cloud
+    ess = attr.ib(validator=attr.validators.optional(_dim_1_validator), default=None)
+    collapse = attr.ib(validator=attr.validators.optional(_dim_1_validator), default=None)
 
     @property
     def batch_size(self):
@@ -88,6 +95,15 @@ class State:
 
             if self.resampling_correction is None:
                 object.__setattr__(self, 'resampling_correction', tf.zeros(self.batch_size))
+
+            if self.t is None:
+                object.__setattr__(self, 't', tf.constant(0, dtype=tf.int32))
+
+            if self.ess is None:
+                object.__setattr__(self, 'ess', tf.zeros(self.batch_size) + self.n_particles)
+
+            if self.collapse is None:
+                object.__setattr__(self, 'collapse', tf.ones(self.batch_size))
 
 
 @attr.s

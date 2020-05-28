@@ -5,7 +5,7 @@ import tensorflow as tf
 from filterflow.base import State, Module
 
 
-@tf.function(experimental_relax_shapes=True)
+@tf.function
 def resample(tensor: tf.Tensor, new_tensor: tf.Tensor, flags: tf.Tensor):
     ndim = len(tensor.shape)
     shape = [-1] + [1] * (ndim - 1)
