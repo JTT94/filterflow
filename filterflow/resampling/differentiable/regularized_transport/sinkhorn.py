@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from filterflow.resampling.differentiable.regularized_transport.utils import cost, softmin, diameter
+from filterflow.resampling.differentiable.regularized_transport.utils import cost, softmin, diameter, max_min
 
 
 # This is very much adapted from Feydy's geomloss work. Hopefully these should merge into one library...
@@ -63,7 +63,7 @@ def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsil
 
     def stop_condition(i, _a_y, _b_x, _a_x, _b_y, continue_, _running_epsilon):
         n_iter_cond = i < max_iter - 1
-        return tf.logical_and(n_iter_cond, tf.reduce_any(continue_))
+        return tf.logical_and(n_iter_cond, tf.reduce_all(continue_))
 
     def apply_one(a_y, b_x, a_x, b_y, continue_, running_epsilon):
         running_epsilon_ = tf.reshape(running_epsilon, [-1, 1])
@@ -107,32 +107,29 @@ def sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsil
                    b_y_init,
                    continue_flag,
                    epsilon_0])
-    converged_a_y, converged_b_x, converged_a_x, converged_b_y = tf.nest.map_structure(tf.stop_gradient,
-                                                                                       (converged_a_y,
-                                                                                        converged_b_x,
-                                                                                        converged_a_x,
-                                                                                        converged_b_y))
 
+    converged_a_y, converged_b_x, converged_a_x, converged_b_y, = tf.nest.map_structure(tf.stop_gradient,
+                                                                                        (converged_a_y,
+                                                                                         converged_b_x,
+                                                                                         converged_a_x,
+                                                                                         converged_b_y))
     epsilon_ = tf.reshape(epsilon, [-1, 1])
-    final_a_y = softmin(epsilon, cost_yx, log_alpha + tf.stop_gradient(converged_b_x) / epsilon_)
-    final_b_x = softmin(epsilon, cost_xy, log_beta + tf.stop_gradient(converged_a_y) / epsilon_)
-    final_a_x = softmin(epsilon, cost_xx, log_alpha + tf.stop_gradient(converged_a_x) / epsilon_)
-    final_b_y = softmin(epsilon, cost_yy, log_beta + tf.stop_gradient(converged_b_y) / epsilon_)
+    final_a_y = softmin(epsilon, cost_yx, log_alpha + converged_b_x / epsilon_)
+    final_b_x = softmin(epsilon, cost_xy, log_beta + converged_a_y / epsilon_)
+    final_a_x = softmin(epsilon, cost_xx, log_alpha + converged_a_x / epsilon_)
+    final_b_y = softmin(epsilon, cost_yy, log_beta + converged_b_y / epsilon_)
 
     return final_a_y, final_b_x, final_a_x, final_b_y, total_iter + 2
 
 
 @tf.function
 def sinkhorn_potentials(log_alpha, x, log_beta, y, epsilon, scaling, threshold, max_iter):
-    diameter_ = tf.stop_gradient(diameter(x, y))
-
-    x_ = x / tf.reshape(diameter_, [-1, 1, 1])
-    y_ = y / tf.reshape(diameter_, [-1, 1, 1])
-    cost_xy = cost(x_, tf.stop_gradient(y_))
-    cost_yx = cost(y, tf.stop_gradient(x_))
-    cost_xx = cost(x_, tf.stop_gradient(x_))
-    cost_yy = cost(y, tf.stop_gradient(y_))
+    cost_xy = cost(x, tf.stop_gradient(y))
+    cost_yx = cost(y, tf.stop_gradient(x))
+    cost_xx = cost(x, tf.stop_gradient(x))
+    cost_yy = cost(y, tf.stop_gradient(y))
+    scale = tf.stop_gradient(max_min(x, y))
     a_y, b_x, a_x, b_y, total_iter = sinkhorn_loop(log_alpha, log_beta, cost_xy, cost_yx, cost_xx, cost_yy, epsilon,
-                                                   diameter_, scaling, threshold, max_iter)
+                                                   scale, scaling, threshold, max_iter)
 
-    return a_y, b_x, a_x, b_y, total_iter, x_, y_
+    return a_y, b_x, a_x, b_y, total_iter

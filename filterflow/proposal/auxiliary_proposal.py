@@ -14,9 +14,9 @@ class AuxiliaryProposal(ProposalModelBase):
         self._transition_model = transition_model
         self._aux_ll = auxiliary_loglikelihood
 
-    def propose(self, state: State, inputs: tf.Tensor, _observation: tf.Tensor):
+    def propose(self, state: State, inputs: tf.Tensor, observation: tf.Tensor, seed=None):
         """See base class"""
-        proposed_particles = self._transition_model.sample(state, inputs)
+        proposed_particles = self._transition_model.sample(state, inputs, seed=seed)
         return attr.evolve(state, particles=proposed_particles)
 
     def loglikelihood(self, proposed_state: State, state: State, inputs: tf.Tensor, observation: tf.Tensor):

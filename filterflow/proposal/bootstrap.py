@@ -3,6 +3,7 @@ import tensorflow as tf
 
 from filterflow.base import State
 from filterflow.proposal.base import ProposalModelBase
+from tensorflow_probability.python.internal import samplers
 
 
 class BootstrapProposalModel(ProposalModelBase):
@@ -13,9 +14,9 @@ class BootstrapProposalModel(ProposalModelBase):
         super(BootstrapProposalModel, self).__init__(name=name)
         self._transition_model = transition_model
 
-    def propose(self, state: State, inputs: tf.Tensor, _observation: tf.Tensor):
+    def propose(self, state: State, inputs: tf.Tensor, observation: tf.Tensor, seed=None):
         """See base class"""
-        proposed_particles = self._transition_model.sample(state, inputs)
+        proposed_particles = self._transition_model.sample(state, inputs, seed=seed)
         return attr.evolve(state, particles=proposed_particles)
 
     def loglikelihood(self, proposed_state: State, state: State, inputs: tf.Tensor, observation: tf.Tensor):

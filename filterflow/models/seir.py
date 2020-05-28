@@ -7,7 +7,6 @@ import datetime
 import numpy as np
 
 import tensorflow as tf
-import tensorflow_addons as tfa
 import tensorflow_probability as tfp
 
 from filterflow.smc import SMC

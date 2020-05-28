@@ -1,5 +1,4 @@
 import tensorflow as tf
-import tensorflow_probability as tfp
 
 
 def _fillna(tensor):
@@ -13,6 +12,14 @@ def diameter(x, y):
     diameter_y = tf.reduce_max(tf.math.reduce_std(y, -1), -1)
 
     return tf.maximum(diameter_x, diameter_y)
+
+
+@tf.function
+def max_min(x, y):
+    max_max = tf.maximum(tf.math.reduce_max(x, [1, 2]), tf.math.reduce_max(y, [1, 2]))
+    min_min = tf.minimum(tf.math.reduce_min(x, [1, 2]), tf.math.reduce_min(y, [1, 2]))
+
+    return max_max - min_min
 
 
 def softmin(epsilon: tf.Tensor, cost_matrix: tf.Tensor, f: tf.Tensor) -> tf.Tensor:
@@ -65,4 +72,4 @@ def cost(x: tf.Tensor, y: tf.Tensor) -> tf.Tensor:
     :return: tensor of shape [B, N, M]
     :rtype tf.Tensor
     """
-    return squared_distances(x, y)
+    return squared_distances(x, y) / 2.

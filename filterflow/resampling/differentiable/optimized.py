@@ -26,7 +26,7 @@ class OptimizedPointCloud(ResamplerBase, metaclass=abc.ABCMeta):
         self.intermediate_resampler = intermediate_resampler
         super(OptimizedPointCloud, self).__init__(name=name)
 
-    def apply(self, state: State, flags: tf.Tensor):
+    def apply(self, state: State, flags: tf.Tensor, seed=None):
         """ Resampling method
 
         :param state State
