@@ -115,15 +115,15 @@ def plot_losses_vs_ess(loss_profiles_df, ess_profiles_df, filename, savefig, dx,
     (-loss_profiles_df / T).plot(ax=ax, legend=False)
 
     ax1 = ax.twinx()
-    loss_profiles_df.plot(ax=ax1, legend=False)
+    ess_profiles_df.plot(ax=ax1, legend=False, linestyle='--')
 
     ax.legend()
     fig.tight_layout()
     if savefig:
         fig.savefig(os.path.join('./charts/',
-                                 f'global_variational_different_lr_loss_{filename}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}.png'))
+                                 f'global_variational_different_lr_loss_ess_{filename}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}.png'))
     else:
-        fig.suptitle(f'variational_different_loss_{filename}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}')
+        fig.suptitle(f'variational_different_loss_ess_{filename}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}')
         plt.show()
 
 
@@ -233,12 +233,12 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.MULTINOMIAL, 'resampling_method')
-flags.DEFINE_float('epsilon', 0.5, 'epsilon')
+flags.DEFINE_float('epsilon', 0.75, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.75, 'scaling')
 flags.DEFINE_float('log_learning_rate_min', -5, 'log_learning_rate_min')
-flags.DEFINE_float('log_learning_rate_max', -2.5, 'log_learning_rate_max')
-flags.DEFINE_integer('n_learning_rates', 2, 'log_learning_rate_max')
+flags.DEFINE_float('log_learning_rate_max', -3, 'log_learning_rate_max')
+flags.DEFINE_integer('n_learning_rates', 4, 'log_learning_rate_max')
 flags.DEFINE_float('convergence_threshold', 1e-3, 'convergence_threshold')
 flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)
 flags.DEFINE_integer('batch_size', 4, 'batch_size', lower_bound=1)
