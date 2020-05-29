@@ -166,7 +166,7 @@ class SMC(Module):
         :return: tensor array of states
         """
         if inputs_series is None:
-            inputs_series = tf.data.Dataset.range(n_observations)
+            inputs_series = tf.data.Dataset.range(tf.cast(n_observations, tf.int64), output_type=tf.int32)
         if return_final:
             return self._return_final_loop(initial_state, observation_series, n_observations, inputs_series, seed)
         else:
