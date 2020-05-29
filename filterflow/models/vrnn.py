@@ -140,7 +140,7 @@ class VRNNTransitionModel(TransitionModelBase):
     def sample(self, state: VRNNState, inputs: tf.Tensor, seed=None):
         rnn_out, rnn_state, latent_encoded = self.run_rnn(state, inputs)
         dist = self.latent_dist(state, rnn_out)
-        latent_state = dist.sample()
+        latent_state = dist.sample(seed=seed)
 
         return VRNNState(particles=latent_state,
                          log_weights=state.log_weights,
@@ -159,8 +159,8 @@ class VRNNProposalModel(ProposalModelBase):
         self._transiton_model = transition_model
 
     def loglikelihood(self, proposed_state: State, state: State, inputs: tf.Tensor, observation: tf.Tensor):
-        rnn_out, rnn_state, latent_encoded = self.run_rnn(state, inputs)
-        dist = self.latent_dist(state, rnn_out)
+        rnn_out, rnn_state, latent_encoded = self._transiton_model.run_rnn(state, inputs)
+        dist = self._transiton_model.latent_dist(state, rnn_out)
         new_latent = proposed_state.particles
         return tf.reduce_sum(dist.log_prob(new_latent), axis=-1)
 
