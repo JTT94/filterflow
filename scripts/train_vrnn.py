@@ -499,6 +499,7 @@ def main(latent_size = 10,
             final_state = smc(state, obs_data, n_observations=T, inputs_series=inputs_data, return_final=True, seed=seed)
             res = tf.reduce_mean(final_state.log_likelihoods)
             ess = final_state.ess
+            tf.print(ess)
             if use_correction_term:
                 return res, tf.reduce_mean(final_state.resampling_correction)
             return res, ess, tf.constant(0.)
@@ -579,6 +580,11 @@ def main(latent_size = 10,
             ess_array = ess_array.numpy()
         
             pickle_obj(loss_array, os.path.join(out_dir, filename))
+
+            filename_ess = "vrnn_ess_{0}.pkl".format(key)
+            pickle_obj(ess_array, os.path.join(out_dir, filename_ess))
+            filename_grad = "vrnn_grad_{0}.pkl".format(key)
+            pickle_obj(grad_array, os.path.join(out_dir, filename_grad))
 
             fig, ax = plt.subplots(figsize=(10, 5))
             ax.plot(ess_array, color=col)
@@ -672,7 +678,7 @@ def flag_main(argv):
          data_seed = FLAGS.data_seed,
          filter_seed = FLAGS.filter_seed,
          fixed_seed = FLAGS.fixed_filter_seed,
-         out_dir='./charts')
+         out_dir=FLAGS.out_dir)
 
 if __name__ == "__main__":
     app.run(flag_main)
