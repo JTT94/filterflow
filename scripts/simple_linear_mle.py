@@ -210,7 +210,7 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None,
     df = pd.DataFrame(final_values - kalman_params, columns=[r'$\theta_1', r'$\theta_2'])
     parameters_diff = np.mean(np.square(df), 0)
     if savefig:
-        filename = f'theta_diff_{resampling_method_enum.name}_batch_size_{batch_size}_batch_data_{batch_data}.tex'
+        filename = f'theta_diff_{resampling_method_enum.name}_batch_size_{batch_size}_batch_data_{batch_data}_changeseed_{change_seed}.tex'
         parameters_diff.to_latex(buf=os.path.join('./tables/', filename),
                                  float_format='{:,.5f}'.format)
     else:
