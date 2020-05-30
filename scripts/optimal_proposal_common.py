@@ -3,6 +3,8 @@ import enum
 import pykalman
 import numpy as np
 
+from scripts.base import kf_loglikelihood
+
 
 def get_data(transition_matrix, observation_matrix, transition_covariance, observation_covariance, T=100,
              random_state=None):
@@ -11,7 +13,8 @@ def get_data(transition_matrix, observation_matrix, transition_covariance, obser
     kf = pykalman.KalmanFilter(transition_matrix, observation_matrix, transition_covariance, observation_covariance)
     sample = kf.sample(T, random_state=random_state)
     data = sample[1].data.astype(np.float32)
-    return data.reshape(T, 1, 1, -1)
+
+    return data.reshape(T, 1, 1, -1), kf_loglikelihood(kf, data)
 
 
 def get_observation_matrix(dx, dy, dense=False, random_state=None):

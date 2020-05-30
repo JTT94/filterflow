@@ -210,11 +210,11 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None,
     df = pd.DataFrame(final_values - kalman_params, columns=[r'$\theta_1', r'$\theta_2'])
     parameters_diff = np.mean(np.square(df), 0)
     if savefig:
-        filename = f'theta_diff_{resampling_method_enum.name}_batch_size_{batch_size}_batch_data_{batch_data}.tex'
-        parameters_diff.to_latex(buf=os.path.join('./tables/', filename),
-                                 float_format='{:,.5f}'.format)
+        filename = f'theta_diff_{resampling_method_enum.name}_batch_size_{batch_size}_batch_data_{batch_data}_changeseed_{change_seed}.csv'
+        parameters_diff.to_csv(os.path.join('./tables/', filename),
+                               float_format='%.5f')
     else:
-        print(parameters_diff.to_latex(float_format='{:,.5f}'.format))
+        print(parameters_diff.to_latex(float_format='%.5f'))
 
 
 # define flags
@@ -224,7 +224,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.MULTINOMIAL, 'resampling_method')
 flags.DEFINE_float('epsilon', 0.5, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
-flags.DEFINE_float('scaling', 0.75, 'scaling')
+flags.DEFINE_float('scaling', 0.85, 'scaling')
 flags.DEFINE_float('learning_rate', 1e-4, 'learning_rate', upper_bound=1e-1)
 flags.DEFINE_float('convergence_threshold', 1e-3, 'convergence_threshold')
 flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)

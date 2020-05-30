@@ -20,7 +20,7 @@ from filterflow.resampling.differentiable import PartiallyCorrectedRegularizedTr
 from filterflow.resampling.differentiable.loss import SinkhornLoss
 from filterflow.resampling.differentiable.optimized import OptimizedPointCloud
 from filterflow.resampling.differentiable.optimizer.sgd import SGD
-
+from functools import partial
 _ = mplot3d  # Importing this monkey patches matplotlib to allow for 3D plots
 
 
@@ -81,7 +81,7 @@ def get_surface(mesh, modifiable_transition_matrix, pf, initial_state, use_corre
 
 # DO NOT DECORATE
 def get_surface_finite_difference(mesh, modifiable_transition_matrix, pf, initial_state, use_correction_term,
-                                  observations_dataset, T, seed, epsilon=1e-2, use_tqdm=False):
+                                  observations_dataset, T, seed, use_tqdm=False, diff_epsilon=1e-2):
     likelihoods = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[])
     gradients = tf.TensorArray(size=len(mesh), dtype=tf.float32, dynamic_size=False, element_shape=[2])
 
@@ -96,14 +96,14 @@ def get_surface_finite_difference(mesh, modifiable_transition_matrix, pf, initia
 
         ll_eps_list = tf.TensorArray(tf.float32, size=mesh.shape[1])
         for n_val in tf.range(mesh.shape[1]):
-            tf_val_eps = tf.tensor_scatter_nd_add(val, [[n_val]], [epsilon])
+            tf_val_eps = tf.tensor_scatter_nd_add(val, [[n_val]], [diff_epsilon])
 
             transition_matrix = tf.linalg.diag(tf_val_eps)
             assign_op = modifiable_transition_matrix.assign(transition_matrix)
             with tf.control_dependencies([assign_op]):
                 ll_eps, _ = routine(pf, initial_state, use_correction_term, observations_dataset, T,
                                     modifiable_transition_matrix, seed)
-                ll_eps_list = ll_eps_list.write(tf.cast(n_val, dtype=tf.int32), (ll_eps - ll) / epsilon)
+                ll_eps_list = ll_eps_list.write(tf.cast(n_val, dtype=tf.int32), (ll_eps - ll) / diff_epsilon)
 
         likelihoods = likelihoods.write(tf.cast(i, tf.int32), ll)
         gradients = gradients.write(tf.cast(i, tf.int32), tf.convert_to_tensor(ll_eps_list.stack(), dtype=tf.float32))
@@ -212,7 +212,7 @@ def kalman_main(kf, data, mesh, mesh_size, epsilon, use_tqdm, savefig):
 
 
 def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100, batch_size=1, n_particles=25,
-         data_seed=0, filter_seed=1, mesh_size=10, savefig=True, use_tqdm=False, use_xla=False):
+         data_seed=0, filter_seed=1, mesh_size=10, savefig=True, use_tqdm=False, use_xla=False, diff_epsilon=1e-1):
     transition_matrix = 0.5 * np.eye(2, dtype=np.float32)
     transition_covariance = 0.5 * np.eye(2, dtype=np.float32)
     observation_matrix = np.eye(2, dtype=np.float32)
@@ -280,7 +280,8 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
     if resampling_method.DIFFERENTIABLE:
         get_method = tf.function(get_surface, experimental_compile=use_xla)
     else:
-        get_method = tf.function(get_surface_finite_difference, experimental_compile=use_xla)
+        fun = partial(get_surface_finite_difference, diff_epsilon=diff_epsilon)
+        get_method = tf.function(fun, experimental_compile=use_xla)
 
     log_likelihoods, gradients = get_method(mesh, modifiable_transition_matrix, smc,
                                             initial_state, False, observation_dataset, T,
@@ -301,17 +302,18 @@ def fun_to_distribute(epsilon):
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.VARIANCE_CORRECTED, 'resampling_method')
+flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.MULTINOMIAL, 'resampling_method')
 flags.DEFINE_float('epsilon', 0.5, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.75, 'scaling')
 flags.DEFINE_float('convergence_threshold', 1e-3, 'convergence_threshold')
+flags.DEFINE_float('diff_epsilon', 1e-2, 'epsilon for finite diff')
 flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)
 flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
 flags.DEFINE_integer('T', 150, 'T', lower_bound=1)
 flags.DEFINE_integer('mesh_size', 20, 'mesh_size', lower_bound=1)
 flags.DEFINE_boolean('savefig', True, 'Save fig')
-flags.DEFINE_integer('seed', 25, 'seed')
+flags.DEFINE_integer('seed', 1234, 'seed')
 flags.DEFINE_integer('data_seed', 123, 'data_seed')
 flags.DEFINE_boolean('use_xla', False, 'Use XLA (experimental)')
 
@@ -330,6 +332,7 @@ def flag_main(argb):
     print('data_seed: {0}'.format(FLAGS.data_seed))
     print('max_iter: {0}'.format(FLAGS.max_iter))
     print('use_xla: {0}'.format(FLAGS.use_xla))
+    print('diff_epsilon: {0}'.format(FLAGS.diff_epsilon))
 
     main(FLAGS.resampling_method,
          resampling_neff=FLAGS.resampling_neff,
@@ -344,7 +347,8 @@ def flag_main(argb):
                                 max_iter=FLAGS.max_iter),
          filter_seed=FLAGS.seed,
          data_seed=FLAGS.data_seed,
-         use_xla=FLAGS.use_xla)
+         use_xla=FLAGS.use_xla,
+         diff_epsilon=FLAGS.diff_epsilon)
 
 
 if __name__ == '__main__':
