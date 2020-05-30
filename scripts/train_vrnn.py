@@ -306,7 +306,7 @@ class VRNNTransitionModel(TransitionModelBase):
         dist = self.latent_dist(state, rnn_out)
         latent_state = dist.sample(seed=seed)
         
-        return VRNNState(particles=latent_state, 
+        return attr.evolve(state, particles=latent_state, 
                           log_weights = state.log_weights,
                           weights=state.weights, 
                           log_likelihoods=state.log_likelihoods,
@@ -458,7 +458,32 @@ def main(latent_size = 10,
 
 
 
+    # record loss
+    LARGE_B = 4
+    N =100
 
+    # initial state
+    large_initial_latent_state = tf.zeros([LARGE_B, N, dimension])
+    large_initial_latent_state = tf.cast(large_initial_latent_state, dtype=float)
+    large_latent_encoded = transition_model.latent_encoder(large_initial_latent_state)
+
+    # initial rnn_state
+    large_initial_rnn_state = [normal_dist.sample([LARGE_B, N, rnn_hidden_size])]*2
+    large_initial_rnn_state = tf.concat(large_initial_rnn_state, axis=-1)
+
+    # rnn_out
+    large_initial_rnn_out = tf.zeros([LARGE_B, N, rnn_hidden_size])
+
+    large_initial_weights = tf.ones((LARGE_B, N), dtype=float) / tf.cast(N, float)
+    large_log_likelihoods = tf.zeros(LARGE_B, dtype=float)
+
+    large_init_state = VRNNState(  particles=large_initial_latent_state, 
+                                    log_weights = tf.math.log(large_initial_weights),
+                                    weights=large_initial_weights, 
+                                    log_likelihoods=large_log_likelihoods,
+                                    rnn_state=large_initial_rnn_state,
+                                    rnn_out=large_initial_rnn_out,
+                                    latent_encoded=large_latent_encoded)
     ## Check variables
 
     # snt networks initiated on first call
@@ -499,7 +524,6 @@ def main(latent_size = 10,
             final_state = smc(state, obs_data, n_observations=T, inputs_series=inputs_data, return_final=True, seed=seed)
             res = tf.reduce_mean(final_state.log_likelihoods)
             ess = final_state.ess
-            tf.print(ess)
             if use_correction_term:
                 return res, tf.reduce_mean(final_state.resampling_correction)
             return res, ess, tf.constant(0.)
@@ -527,6 +551,7 @@ def main(latent_size = 10,
                 reset_operations = [v.assign(init) for v, init in zip(trainable_variables, init_values)]
             else:
                 reset_operations = []
+            multi_loss_tensor_array = tf.TensorArray(dtype=tf.float32, size=num_steps, dynamic_size=False, element_shape=[])    
             loss_tensor_array = tf.TensorArray(dtype=tf.float32, size=num_steps, dynamic_size=False, element_shape=[])
             ess_tensor_array = tf.TensorArray(dtype=tf.float32, size=num_steps, dynamic_size=False, element_shape=[])
             grad_tensor_array = tf.TensorArray(dtype=tf.float32, size=num_steps, dynamic_size=False, element_shape=[])
@@ -544,7 +569,9 @@ def main(latent_size = 10,
                         loss, grads, ess = train_one_step(smc, use_correction_term, seed)
                     with tf.control_dependencies([loss]):
                         toc_loss = tf.timestamp()            
-
+                    multi_loss_state = multinomial_smc(large_init_state, obs_data, 
+                                 n_observations=T, inputs_series=inputs_data, return_final=True, seed=seed)
+                    multi_loss = -tf.reduce_mean(multi_loss_state.log_likelihoods)
 
                     toc += toc_loss - tic_loss
 
@@ -552,13 +579,20 @@ def main(latent_size = 10,
                     
                     print_step = num_steps // 10
                     if step % print_step == 0:
-                        tf.print('Step', step, '/', num_steps, ', scaled loss = ', loss/T,', loss = ', loss, ': ms per step= ', 1000. * toc / tf.cast(step, tf.float64), ': total compute time (s)= ', toc, 'Real Time elapsed (s): ', tf.timestamp()-tic, ', max abs grads = ', max_grad, end='\r')
-                    
+                        tf.print('Step', step, '/', num_steps, 
+                                 ', scaled loss = ', loss/T,
+                                 ', loss = ', loss, 
+                                 ', multi_loss= ', multi_loss,
+                                 ': ms per step= ', 1000. * toc / tf.cast(step, tf.float64),
+                                  end='\r')
+                    multi_loss_tensor_array = multi_loss_tensor_array.write(step-1, multi_loss)
                     ess_tensor_array = ess_tensor_array.write(step-1, ess[0])
                     loss_tensor_array = loss_tensor_array.write(step-1, loss)
                     grad_tensor_array = grad_tensor_array.write(step-1, max_grad)
                     time_tensor_array = time_tensor_array.write(step-1, toc)
-            return loss_tensor_array.stack(), grad_tensor_array.stack(), time_tensor_array.stack(), ess_tensor_array.stack()
+            return loss_tensor_array.stack(), grad_tensor_array.stack(), 
+                   time_tensor_array.stack(), ess_tensor_array.stack(), 
+                   multi_loss_tensor_array.stack()
             
         return train_niter(smc, tf.constant(n_iter))
 
@@ -573,13 +607,16 @@ def main(latent_size = 10,
         if (filename not in os.listdir(out_dir)) or force:
             print("\n {0}".format(method))
             print(key)
-            loss_array, grad_array, time_array, ess_array = run_smc(smc, optimizer, n_iter,seed=filter_seed)
+            loss_array, grad_array, time_array, ess_array, multi_loss_array = run_smc(smc, optimizer, n_iter,seed=filter_seed)
             loss_array = loss_array.numpy()
             grad_array = grad_array.numpy()
             time_array = time_array.numpy()
             ess_array = ess_array.numpy()
         
             pickle_obj(loss_array, os.path.join(out_dir, filename))
+
+            filename_mloss = "vrnn_mloss_{0}.pkl".format(key)
+            pickle_obj(multi_loss_array, os.path.join(out_dir, filename_mloss))
 
             filename_ess = "vrnn_ess_{0}.pkl".format(key)
             pickle_obj(ess_array, os.path.join(out_dir, filename_ess))
