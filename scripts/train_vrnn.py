@@ -383,7 +383,8 @@ def make_optimizer(initial_learning_rate = 0.01, decay_steps=100, decay_rate=0.7
 
 # -----------------------------------------------------------
 
-def main(latent_size = 10, 
+def main(run_method, 
+         latent_size = 10, 
          latent_encoded_size = 32, 
          batch_size = 1, 
          n_particles = 25, 
@@ -459,8 +460,8 @@ def main(latent_size = 10,
 
 
     # record loss
-    LARGE_B = 4
-    N =100
+    LARGE_B = 50
+    N = 25
 
     # initial state
     large_initial_latent_state = tf.zeros([LARGE_B, N, dimension])
@@ -474,13 +475,7 @@ def main(latent_size = 10,
     # rnn_out
     large_initial_rnn_out = tf.zeros([LARGE_B, N, rnn_hidden_size])
 
-    large_initial_weights = tf.ones((LARGE_B, N), dtype=float) / tf.cast(N, float)
-    large_log_likelihoods = tf.zeros(LARGE_B, dtype=float)
-
     large_init_state = VRNNState(  particles=large_initial_latent_state, 
-                                    log_weights = tf.math.log(large_initial_weights),
-                                    weights=large_initial_weights, 
-                                    log_likelihoods=large_log_likelihoods,
                                     rnn_state=large_initial_rnn_state,
                                     rnn_out=large_initial_rnn_out,
                                     latent_encoded=large_latent_encoded)
@@ -569,9 +564,9 @@ def main(latent_size = 10,
                         loss, grads, ess = train_one_step(smc, use_correction_term, seed)
                     with tf.control_dependencies([loss]):
                         toc_loss = tf.timestamp()            
-                    multi_loss_state = multinomial_smc(large_init_state, obs_data, 
-                                 n_observations=T, inputs_series=inputs_data, return_final=True, seed=seed)
-                    multi_loss = -tf.reduce_mean(multi_loss_state.log_likelihoods)
+                        multi_loss_state = multinomial_smc(large_init_state, obs_data, 
+                                    n_observations=T, inputs_series=inputs_data, return_final=True, seed=seed)
+                        multi_loss = -tf.reduce_mean(multi_loss_state.log_likelihoods)
 
                     toc += toc_loss - tic_loss
 
@@ -590,9 +585,9 @@ def main(latent_size = 10,
                     loss_tensor_array = loss_tensor_array.write(step-1, loss)
                     grad_tensor_array = grad_tensor_array.write(step-1, max_grad)
                     time_tensor_array = time_tensor_array.write(step-1, toc)
-            return loss_tensor_array.stack(), grad_tensor_array.stack(), 
+            return (loss_tensor_array.stack(), grad_tensor_array.stack(), 
                    time_tensor_array.stack(), ess_tensor_array.stack(), 
-                   multi_loss_tensor_array.stack()
+                   multi_loss_tensor_array.stack())
             
         return train_niter(smc, tf.constant(n_iter))
 
@@ -608,10 +603,12 @@ def main(latent_size = 10,
             print("\n {0}".format(method))
             print(key)
             loss_array, grad_array, time_array, ess_array, multi_loss_array = run_smc(smc, optimizer, n_iter,seed=filter_seed)
+            
             loss_array = loss_array.numpy()
             grad_array = grad_array.numpy()
             time_array = time_array.numpy()
             ess_array = ess_array.numpy()
+            multi_loss_array = multi_loss_array.numpy()
         
             pickle_obj(loss_array, os.path.join(out_dir, filename))
 
@@ -641,20 +638,25 @@ def main(latent_size = 10,
         #fig.savefig(os.path.join(out_dir, 'vrnn_loss_{0}.png'.format(key)))
         #plt.close()
 
-        return loss_array
+        return multi_loss_array
+    
+    print(run_method)
+    if run_method == 'mult':
+        multi_array = run_block(multinomial_smc, 'mult', n_iter, initial_lr, decay, steps, out_dir, col = 'blue')
 
-    multi_array = run_block(multinomial_smc, 'mult', n_iter, initial_lr, decay, steps, out_dir, col = 'blue')
-    reg_array = run_block(regularized_smc, 'reg', n_iter, initial_lr, decay, steps, out_dir, col = 'green')
-    both_key = fn_identifier(initial_lr, decay, steps, 'both')
+    if run_method == 'reg':
+        print(resampling_method)
+        reg_array = run_block(regularized_smc, 'reg', n_iter, initial_lr, decay, steps, out_dir, col = 'green')
+    #both_key = fn_identifier(initial_lr, decay, steps, 'both')
 
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.plot(multi_array[warmup:], color='blue')
-    ax.plot(reg_array[warmup:], color='green')
+    #fig, ax = plt.subplots(figsize=(10, 5))
+    #ax.plot(multi_array[warmup:], color='blue')
+    #ax.plot(reg_array[warmup:], color='green')
+    #fig.savefig(os.path.join(out_dir, 'vrnn_loss_{0}.png'.format(both_key)))
+    #plt.close()
+    #print('vrnn_loss_{0}.png'.format(both_key))
+    #print("\n\n")
 
-    fig.savefig(os.path.join(out_dir, 'vrnn_loss_{0}.png'.format(both_key)))
-    plt.close()
-    print('vrnn_loss_{0}.png'.format(both_key))
-    print("\n\n")
 
 # define flags
 
@@ -679,9 +681,11 @@ flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
 flags.DEFINE_integer('filter_seed', 42, 'filter_seed')
 flags.DEFINE_integer('data_seed', 0, 'data_seed')
 flags.DEFINE_string('out_dir', './', 'out_dir')
+flags.DEFINE_string('resampling_method', 'reg', 'resampling method')
 flags.DEFINE_boolean('fixed_filter_seed', False, 'fixed_filter_seed')
 
 def flag_main(argv):
+    print('resampling_method: {0}'.format(FLAGS.resampling_method))
     print('epsilon: {0}'.format(FLAGS.epsilon))
     print('resampling_neff: {0}'.format(FLAGS.resampling_neff))
     print('convergence_threshold: {0}'.format(FLAGS.convergence_threshold))
@@ -699,7 +703,8 @@ def flag_main(argv):
     print('latent_encoded_size: {0}'.format(FLAGS.latent_encoded_size))
     print('n_iter: {0}'.format(FLAGS.n_iter))
 
-    main(latent_size = FLAGS.latent_size, 
+    main(run_method = FLAGS.resampling_method,
+         latent_size = FLAGS.latent_size, 
          latent_encoded_size = FLAGS.latent_encoded_size, 
          batch_size = FLAGS.batch_size, 
          n_particles = FLAGS.n_particles, 
