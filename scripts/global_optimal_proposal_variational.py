@@ -99,7 +99,7 @@ def plot_losses(loss_profiles_df, filename, savefig, dx, dy, dense, T, change_se
 
 
 def plot_losses_vs_ess(loss_profiles_df, ess_profiles_df, filename, savefig, dx, dy, dense, T, n_particles, change_seed,
-                       batch_size, optimal_filter_val, kalman_val, n_iter):
+                       batch_size, optimal_filter_val, kalman_val, n_iter, mse_table):
     fig, ax = plt.subplots(figsize=(5, 3))
     loss_profiles_df.style.float_format = '${:,.1f}'.format
     loss_profiles_df.plot(ax=ax, legend=False)
@@ -117,10 +117,14 @@ def plot_losses_vs_ess(loss_profiles_df, ess_profiles_df, filename, savefig, dx,
 
     # ax.legend()
     fig.tight_layout()
+    filename = f'global_variational_different_lr_loss_ess_{filename}_N_{n_particles}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}_change_seed_{change_seed}_batch_size_{batch_size}'
     if savefig:
         fig.savefig(os.path.join('./charts/',
-                                 f'global_variational_different_lr_loss_ess_{filename}_N_{n_particles}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}_change_seed_{change_seed}_batch_size_{batch_size}.png'))
+                                 filename + '.png'))
+        mse_table.to_csv(os.path.join('./tables/', filename + '.csv'),
+                         float_format='%.5f')
     else:
+        print(mse_table)
         fig.suptitle(f'variational_different_loss_ess_{filename}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}')
         plt.show()
 
@@ -190,7 +194,6 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
     initial_particles = np_random_state.normal(0., 1., [batch_size, n_particles, dx]).astype(np.float32)
     initial_state = State(initial_particles)
 
-
     log_phi_x_0 = 0.5 * tf.ones(dx)
     phi_y_0 = tf.zeros(dy)
 
@@ -226,15 +229,17 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
     ess_df.columns.name = 'log learning rate'
     ess_df.columns.epoch = 'epoch'
 
+    delta_phi_m_1 = tf.linalg.diag(tf.exp(-log_phi_x))
+    diff_cov = optimal_smc._proposal_model._sigma - delta_phi_m_1 @ transition_covariance
+    approx_error = tf.linalg.diag_part(diff_cov).numpy()
+    mean_error = np.sqrt(np.mean(approx_error ** 2))
+
+    mean_data = pd.DataFrame([[mean_error]], index=pd.MultiIndex.from_tuples([(batch_size, n_particles)]),
+                             columns=pd.MultiIndex.from_tuples([(resampling_method_enum.name, change_seed)]))
 
     # plot_losses(losses_df, resampling_method_enum.name, savefig, dx, dy, dense, T, change_seed)
     plot_losses_vs_ess(losses_df, ess_df, resampling_method_enum.name, savefig, dx, dy, dense, T, n_particles,
-                       change_seed, batch_size, optimal_likelihood, ll/T, n_iter)
-
-    print(losses_df)
-    print(phi_y)
-    print(log_phi_x)
-    print(optimal_likelihood)
+                       change_seed, batch_size, optimal_likelihood, ll / T, n_iter, mean_data)
 
 
 FLAGS = flags.FLAGS
