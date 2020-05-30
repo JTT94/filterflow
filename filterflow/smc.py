@@ -93,6 +93,7 @@ class SMC(Module):
         :return: Updated weights
         """
         proposed_state = self._proposal_model.propose(state, inputs, observation, seed=seed)
+
         log_weights = self._transition_model.loglikelihood(state, proposed_state, inputs)
         log_weights = log_weights + self._observation_model.loglikelihood(proposed_state, observation)
         log_weights = log_weights - self._proposal_model.loglikelihood(proposed_state, state, inputs, observation)
@@ -104,7 +105,7 @@ class SMC(Module):
         return attr.evolve(proposed_state, weights=tf.math.exp(normalized_log_weights),
                            log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)
 
-    @tf.function(experimental_implements=tf.autograph.experimental.Feature.EQUALITY_OPERATORS)
+    @tf.function
     def _return(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor,
                 inputs_series: tf.data.Dataset, seed=None):
 
@@ -119,7 +120,7 @@ class SMC(Module):
         dtype = initial_state.particles.dtype
 
         # init series
-        StateSeriesKlass = DTYPE_TO_STATE_SERIES[dtype]
+        StateSeriesKlass = DTYPE_TO_STATE_SERIES[dtype.name]
         states_series = StateSeriesKlass(batch_size=initial_state.batch_size,
                                          n_particles=initial_state.n_particles,
                                          dimension=initial_state.dimension)

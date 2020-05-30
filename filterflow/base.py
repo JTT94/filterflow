@@ -212,7 +212,7 @@ class DoubleStateSeries(StateSeries):
     DTYPE = tf.dtypes.float64
 
 
-DTYPE_TO_STATE_SERIES = {klass.DTYPE: klass for klass in StateSeries.__subclasses__()}
+DTYPE_TO_STATE_SERIES = {klass.DTYPE.name: klass for klass in StateSeries.__subclasses__()}
 
 # @attr.s(frozen=True)
 # class Observation:

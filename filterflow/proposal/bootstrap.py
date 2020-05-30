@@ -3,7 +3,6 @@ import tensorflow as tf
 
 from filterflow.base import State
 from filterflow.proposal.base import ProposalModelBase
-from tensorflow_probability.python.internal import samplers
 
 
 class BootstrapProposalModel(ProposalModelBase):
