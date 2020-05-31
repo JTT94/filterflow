@@ -621,12 +621,39 @@ def main(run_method,
                                  ', multi_loss= ', multi_loss,
                                  ': ms per step= ', 1000. * toc / tf.cast(step, tf.float64),
                                   end='\r')
+                        (loss_array, 
+                        grad_array, 
+                        time_array, 
+                        ess_array, 
+                        multi_loss_array, 
+                        obs_lik_array) = (loss_tensor_array.stack().numpy(), 
+                                          grad_tensor_array.stack().numpy(), 
+                                          time_tensor_array.stack().numpy(),
+                                          ess_tensor_array.stack().numpy(),
+                                          multi_loss_tensor_array.stack().numpy(), 
+                                          obs_lik_tensor_array.stack().numpy())    
+                        key = fn_identifier(initial_lr, decay, steps, run_method)
+                        filename_olik = "vrnn_olik_{0}.pkl".format(key)
+                        pickle_obj(obs_lik_array, os.path.join(out_dir, filename_olik))
+
+                        filename_mloss = "vrnn_mloss_{0}.pkl".format(key)
+                        pickle_obj(multi_loss_array, os.path.join(out_dir, filename_mloss))
+
+                        filename_ess = "vrnn_ess_{0}.pkl".format(key)
+                        pickle_obj(ess_array, os.path.join(out_dir, filename_ess))
+                        filename_grad = "vrnn_grad_{0}.pkl".format(key)
+                        pickle_obj(grad_array, os.path.join(out_dir, filename_grad))
+
+
                     obs_lik_tensor_array = obs_lik_tensor_array.write(step-1, obs_likelihood)                                  
                     multi_loss_tensor_array = multi_loss_tensor_array.write(step-1, multi_loss)
                     ess_tensor_array = ess_tensor_array.write(step-1, ess[0])
                     loss_tensor_array = loss_tensor_array.write(step-1, loss)
                     grad_tensor_array = grad_tensor_array.write(step-1, max_grad)
                     time_tensor_array = time_tensor_array.write(step-1, toc)
+                    pickle_obj(loss_array, os.path.join(out_dir, filename))
+
+                    
             return (loss_tensor_array.stack(), grad_tensor_array.stack(), 
                    time_tensor_array.stack(), ess_tensor_array.stack(), 
                    multi_loss_tensor_array.stack(), obs_lik_tensor_array.stack())
