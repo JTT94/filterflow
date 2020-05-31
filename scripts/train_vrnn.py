@@ -31,14 +31,14 @@ from filterflow.observation.base import ObservationModelBase, ObservationSampler
 from filterflow.observation.linear import LinearObservationSampler
 from filterflow.transition.random_walk import RandomWalkModel
 from filterflow.proposal import BootstrapProposalModel
+from filterflow.proposal.base import ProposalModelBase
 from filterflow.transition.base import TransitionModelBase
-
-from filterflow.resampling.criterion import NeffCriterion, AlwaysResample, NeverResample, _neff
+from filterflow.resampling.criterion import NeffCriterion, AlwaysResample, NeverResample, _neff, ResamplingCriterionBase
 from filterflow.resampling.standard import SystematicResampler, MultinomialResampler
 from filterflow.resampling.differentiable import RegularisedTransform, CorrectedRegularizedTransform, PartiallyCorrectedRegularizedTransform
 
-from filterflow.resampling.base import NoResampling
-
+from filterflow.resampling.base import NoResampling, ResamplerBase
+from filterflow.utils import normalize
 from filterflow.state_space_model import StateSpaceModel
 
 
@@ -367,6 +367,7 @@ class VRNNState(State):
     ADDITIONAL_STATE_VARIABLES = ('rnn_state',) # rnn_out and encoded no need to be resampled
     rnn_state = attr.ib(default=None)
     rnn_out = attr.ib(default=None)
+    obs_likelihood = attr.ib(default=None)
     latent_encoded = attr.ib(default=None)
 
 def make_optimizer(initial_learning_rate = 0.01, decay_steps=100, decay_rate=0.75, staircase=True):
@@ -379,8 +380,44 @@ def make_optimizer(initial_learning_rate = 0.01, decay_steps=100, decay_rate=0.7
     optimizer = tf.optimizers.Adam(learning_rate=lr_schedule)
     return optimizer
 
+class VRNNSMC(SMC):
+    def __init__(self, observation_model: ObservationModelBase, transition_model: TransitionModelBase,
+                 proposal_model: ProposalModelBase, resampling_criterion: ResamplingCriterionBase,
+                 resampling_method: ResamplerBase, name='VRNNSMC'):
+        super(VRNNSMC, self).__init__(observation_model, 
+                                      transition_model, 
+                                      proposal_model, 
+                                      resampling_criterion, resampling_method, name=name)
 
+    @tf.function
+    def propose_and_weight(self, state: State, observation: tf.Tensor,
+                           inputs: tf.Tensor, seed=None):
+        """
+        :param state: State
+            current state of the filter
+        :param observation: tf.Tensor
+            observation to compare the state against
+        :param inputs: tf.Tensor
+            inputs for the observation_model
+        :return: Updated weights
+        """
+        proposed_state = self._proposal_model.propose(state, inputs, observation, seed=seed)
 
+        log_weights = self._transition_model.loglikelihood(state, proposed_state, inputs)
+        obs_likelihood = self._observation_model.loglikelihood(proposed_state, observation)
+        log_weights = log_weights + obs_likelihood
+        log_weights = log_weights - self._proposal_model.loglikelihood(proposed_state, state, inputs, observation)
+        log_weights = log_weights + state.log_weights
+
+        log_likelihood_increment = tf.math.reduce_logsumexp(log_weights, 1)
+        log_likelihoods = state.log_likelihoods + log_likelihood_increment
+        normalized_log_weights = normalize(log_weights, 1, state.n_particles, True)
+        
+        return attr.evolve(proposed_state, 
+                           obs_likelihood=tf.reduce_sum(obs_likelihood,-1),
+                           weights=tf.math.exp(normalized_log_weights),
+                           log_weights=normalized_log_weights, 
+                           log_likelihoods=log_likelihoods)
 # -----------------------------------------------------------
 
 def main(run_method, 
@@ -452,6 +489,7 @@ def main(run_method,
     init_state = VRNNState(particles=initial_latent_state, 
                             log_weights = tf.math.log(initial_weights),
                             weights=initial_weights, 
+                            obs_likelihood=log_likelihoods,
                             log_likelihoods=log_likelihoods,
                             rnn_state = initial_rnn_state,
                             rnn_out = initial_rnn_out,
@@ -474,8 +512,9 @@ def main(run_method,
 
     # rnn_out
     large_initial_rnn_out = tf.zeros([LARGE_B, N, rnn_hidden_size])
-
+    obs_likelihood = tf.zeros(LARGE_B, dtype=float)
     large_init_state = VRNNState(  particles=large_initial_latent_state, 
+                                    obs_likelihood =obs_likelihood,
                                     rnn_state=large_initial_rnn_state,
                                     rnn_out=large_initial_rnn_out,
                                     latent_encoded=large_latent_encoded)
@@ -509,8 +548,8 @@ def main(run_method,
                                        convergence_threshold=convergence_threshold)
 
         
-    multinomial_smc = SMC(observation_model, transition_model, proposal_model, resampling_criterion, resampling_method)
-    regularized_smc = SMC(observation_model, transition_model, proposal_model, resampling_criterion, regularized)
+    multinomial_smc = VRNNSMC(observation_model, transition_model, proposal_model, resampling_criterion, resampling_method)
+    regularized_smc = VRNNSMC(observation_model, transition_model, proposal_model, resampling_criterion, regularized)
 
     def run_smc(smc, optimizer, n_iter, seed=filter_seed):
         #print(optimizer.weights)# check
@@ -518,27 +557,28 @@ def main(run_method,
         def smc_routine(smc, state, use_correction_term=False, seed=seed):
             final_state = smc(state, obs_data, n_observations=T, inputs_series=inputs_data, return_final=True, seed=seed)
             res = tf.reduce_mean(final_state.log_likelihoods)
+            obs_likelihood = tf.reduce_mean(final_state.obs_likelihood)
             ess = final_state.ess
             if use_correction_term:
                 return res, tf.reduce_mean(final_state.resampling_correction)
-            return res, ess, tf.constant(0.)
+            return res, ess, tf.constant(0.), obs_likelihood
 
 
         @tf.function
         def run_one_step(smc, use_correction_term, init_state, seed=seed):
             with tf.GradientTape() as tape:
                 tape.watch(trainable_variables)
-                real_ll, ess, correction = smc_routine(smc, init_state, use_correction_term, seed)
+                real_ll, ess, correction, obs_likelihood = smc_routine(smc, init_state, use_correction_term, seed)
                 loss = -(real_ll + correction)
             grads_loss = tape.gradient(loss, trainable_variables)
-            return real_ll, grads_loss, ess
+            return real_ll, grads_loss, ess, obs_likelihood
 
         @tf.function
         def train_one_step(smc, use_correction_term, seed=seed):
-            real_ll, grads_loss, ess = run_one_step(smc, use_correction_term, init_state, seed)
+            real_ll, grads_loss, ess, obs_likelihood = run_one_step(smc, use_correction_term, init_state, seed)
             capped_gvs = [tf.clip_by_value(grad, -500., 500.) for grad in grads_loss]
             optimizer.apply_gradients(zip(capped_gvs, trainable_variables))
-            return -real_ll, capped_gvs, ess
+            return -real_ll, capped_gvs, ess, obs_likelihood
 
         @tf.function
         def train_niter(smc, num_steps=100, use_correction_term=False, reset=True, seed=seed, fixed_seed=fixed_seed):
@@ -546,6 +586,7 @@ def main(run_method,
                 reset_operations = [v.assign(init) for v, init in zip(trainable_variables, init_values)]
             else:
                 reset_operations = []
+            obs_lik_tensor_array = tf.TensorArray(dtype=tf.float32, size=num_steps, dynamic_size=False, element_shape=[])    
             multi_loss_tensor_array = tf.TensorArray(dtype=tf.float32, size=num_steps, dynamic_size=False, element_shape=[])    
             loss_tensor_array = tf.TensorArray(dtype=tf.float32, size=num_steps, dynamic_size=False, element_shape=[])
             ess_tensor_array = tf.TensorArray(dtype=tf.float32, size=num_steps, dynamic_size=False, element_shape=[])
@@ -561,13 +602,13 @@ def main(run_method,
                         seed = step
                     tic_loss = tf.timestamp()
                     with tf.control_dependencies([tic_loss]):
-                        loss, grads, ess = train_one_step(smc, use_correction_term, seed)
+                        loss, grads, ess_run, obs_likelihood = train_one_step(smc, use_correction_term, seed)
                     with tf.control_dependencies([loss]):
                         toc_loss = tf.timestamp()            
                         multi_loss_state = multinomial_smc(large_init_state, obs_data, 
                                     n_observations=T, inputs_series=inputs_data, return_final=True, seed=seed)
                         multi_loss = -tf.reduce_mean(multi_loss_state.log_likelihoods)
-
+                        ess = multi_loss_state.ess
                     toc += toc_loss - tic_loss
 
                     max_grad = tf.reduce_max([tf.reduce_max(tf.abs(grad)) for grad in grads])
@@ -575,11 +616,12 @@ def main(run_method,
                     print_step = num_steps // 10
                     if step % print_step == 0:
                         tf.print('Step', step, '/', num_steps, 
-                                 ', scaled loss = ', loss/T,
+                                 ', obs_likelihood = ', obs_likelihood,
                                  ', loss = ', loss, 
                                  ', multi_loss= ', multi_loss,
                                  ': ms per step= ', 1000. * toc / tf.cast(step, tf.float64),
                                   end='\r')
+                    obs_lik_tensor_array = obs_lik_tensor_array.write(step-1, obs_likelihood)                                  
                     multi_loss_tensor_array = multi_loss_tensor_array.write(step-1, multi_loss)
                     ess_tensor_array = ess_tensor_array.write(step-1, ess[0])
                     loss_tensor_array = loss_tensor_array.write(step-1, loss)
@@ -587,7 +629,7 @@ def main(run_method,
                     time_tensor_array = time_tensor_array.write(step-1, toc)
             return (loss_tensor_array.stack(), grad_tensor_array.stack(), 
                    time_tensor_array.stack(), ess_tensor_array.stack(), 
-                   multi_loss_tensor_array.stack())
+                   multi_loss_tensor_array.stack(), obs_lik_tensor_array.stack())
             
         return train_niter(smc, tf.constant(n_iter))
 
@@ -599,39 +641,48 @@ def main(run_method,
         key = fn_identifier(initial_lr, decay, steps, method)
         filename = "vrnn_loss_{0}.pkl".format(key)
         filepath= os.path.join(out_dir, filename)
-        if (filename not in os.listdir(out_dir)) or force:
-            print("\n {0}".format(method))
-            print(key)
-            loss_array, grad_array, time_array, ess_array, multi_loss_array = run_smc(smc, optimizer, n_iter,seed=filter_seed)
-            
-            loss_array = loss_array.numpy()
-            grad_array = grad_array.numpy()
-            time_array = time_array.numpy()
-            ess_array = ess_array.numpy()
-            multi_loss_array = multi_loss_array.numpy()
+
+        print("\n {0}".format(method))
+
+        print(key)
         
-            pickle_obj(loss_array, os.path.join(out_dir, filename))
+        (loss_array, 
+        grad_array, 
+        time_array, 
+        ess_array, 
+        multi_loss_array, 
+        obs_lik_array) = run_smc(smc, optimizer, n_iter,seed=filter_seed)
+        
+        obs_lik_array = obs_lik_array.numpy() 
+        loss_array = loss_array.numpy()
+        grad_array = grad_array.numpy()
+        time_array = time_array.numpy()
+        ess_array = ess_array.numpy()
+        multi_loss_array = multi_loss_array.numpy()
+    
+        pickle_obj(loss_array, os.path.join(out_dir, filename))
 
-            filename_mloss = "vrnn_mloss_{0}.pkl".format(key)
-            pickle_obj(multi_loss_array, os.path.join(out_dir, filename_mloss))
+        filename_olik = "vrnn_olik_{0}.pkl".format(key)
+        pickle_obj(obs_lik_array, os.path.join(out_dir, filename_olik))
 
-            filename_ess = "vrnn_ess_{0}.pkl".format(key)
-            pickle_obj(ess_array, os.path.join(out_dir, filename_ess))
-            filename_grad = "vrnn_grad_{0}.pkl".format(key)
-            pickle_obj(grad_array, os.path.join(out_dir, filename_grad))
+        filename_mloss = "vrnn_mloss_{0}.pkl".format(key)
+        pickle_obj(multi_loss_array, os.path.join(out_dir, filename_mloss))
 
-            fig, ax = plt.subplots(figsize=(10, 5))
-            ax.plot(ess_array, color=col)
-            fig.savefig(os.path.join(out_dir, 'vrnn_ess_{0}.png'.format(key)))
-            plt.close()
+        filename_ess = "vrnn_ess_{0}.pkl".format(key)
+        pickle_obj(ess_array, os.path.join(out_dir, filename_ess))
+        filename_grad = "vrnn_grad_{0}.pkl".format(key)
+        pickle_obj(grad_array, os.path.join(out_dir, filename_grad))
 
-            fig, ax = plt.subplots(figsize=(10, 5))
-            ax.plot(grad_array, color=col)
-            fig.savefig(os.path.join(out_dir, 'vrnn_grad_{0}.png'.format(key)))
-            plt.close()
-            
-        else:
-            loss_array = unpickle_obj(filepath)
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(ess_array, color=col)
+        fig.savefig(os.path.join(out_dir, 'vrnn_ess_{0}.png'.format(key)))
+        plt.close()
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(grad_array, color=col)
+        fig.savefig(os.path.join(out_dir, 'vrnn_grad_{0}.png'.format(key)))
+        plt.close()
+
             
         #fig, ax = plt.subplots(figsize=(10, 5))
         #ax.plot(loss_array[warmup:], color=col)
