@@ -1,7 +1,0 @@
-cp ./tf_changes/dataset_ops.py ./venv/Lib/site-packages/tensorflow_core/python/data/ops/dataset_ops.py
-
-cp ./tf_changes/nest.py ./venv/Lib/site-packages/tensorflow_core/python/data/util/nest.py
-
-cp ./tf_changes/structure.py ./venv/Lib/site-packages/tensorflow_core/python/data/util/structure.py
-
-cp ./tf_changes/type_spec.py ./venv/Lib/site-packages/tensorflow_core/python/framework/type_spec.py
