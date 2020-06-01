@@ -83,7 +83,6 @@ class SMC(Module):
             tf.stop_gradient(centered_reward) * prior_state.log_weights, 1)
         return attr.evolve(new_state, resampling_correction=resampling_correction)
 
-    @tf.function
     def propose_and_weight(self, state: State, observation: tf.Tensor,
                            inputs: tf.Tensor, seed=None):
         """
@@ -162,7 +161,6 @@ class SMC(Module):
         final_state, _ = self._return(initial_state, observation_series, n_observations, inputs_series, seed)
         return final_state
 
-    @tf.function
     def __call__(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor,
                  inputs_series: tf.data.Dataset = None, return_final=False, seed=None):
         """
