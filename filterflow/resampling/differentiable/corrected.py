@@ -17,7 +17,7 @@ class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
 
     # TODO: Document this really nicely
     def __init__(self, epsilon, scaling=0.75, max_iter=100, convergence_threshold=1e-3, ricatti_solver=None,
-                 propagate_correction_gradient=True, name='RegularisedTransform'):
+                 propagate_correction_gradient=True, name='RegularisedTransform', **_kwargs):
         """Constructor
 
         :param epsilon: float
@@ -101,7 +101,7 @@ class PartiallyCorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMet
 
         transformed_std = tf.math.reduce_std(resampled_state.particles, axis=[1], keepdims=True)
         alpha = tf.where(transformed_std > 0, weighted_std / transformed_std, 1.)
-        alpha = tf.clip_by_value(tf.stop_gradient(alpha), 0.5, 1.5)
+        alpha = tf.clip_by_value(tf.stop_gradient(alpha), 0.5, 2.)
         beta = (1. - alpha) * weighted_average
 
         return attr.evolve(resampled_state, particles=alpha * resampled_state.particles + beta)

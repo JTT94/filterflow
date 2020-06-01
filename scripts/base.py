@@ -14,3 +14,5 @@ def kf_loglikelihood(kf, np_obs):
     with mock.patch('pykalman.utils.linalg.solve_triangular') as m:
         m.side_effect = solve_triangular
         return kf.loglikelihood(np_obs)
+
+
