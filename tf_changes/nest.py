@@ -36,10 +36,9 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
-import six as _six
 
 import attr
-
+import six as _six
 from tensorflow.python import _pywrap_utils
 from tensorflow.python.framework import sparse_tensor as _sparse_tensor
 from tensorflow.python.util.compat import collections_abc as _collections_abc

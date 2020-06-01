@@ -23,7 +23,6 @@ import functools
 import attr
 import six
 import wrapt
-
 from tensorflow.python.data.util import nest
 from tensorflow.python.framework import composite_tensor
 from tensorflow.python.framework import ops

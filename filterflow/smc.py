@@ -53,7 +53,10 @@ class SMC(Module):
             temp_seed = tf.random.uniform((), 0, 2 ** 16, tf.int32)
             seed1, seed2 = samplers.split_seed(temp_seed, n=2, salt='propose_and_weight')
         # check if resampling is required
+        # tf.print("weights", tf.reduce_min(state.log_weights, 1))
+        # tf.print("ess_1", 1 / tf.reduce_sum(state.weights ** 2, -1))
         resampling_flag, ess = self._resampling_criterion.apply(state)
+        # tf.print("ess", ess)
         # update running average efficient sample size
         state = attr.evolve(state, ess=ess / float_t_1 + state.ess * (float_t / float_t_1))
         # perform resampling
@@ -93,17 +96,20 @@ class SMC(Module):
         :return: Updated weights
         """
         proposed_state = self._proposal_model.propose(state, inputs, observation, seed=seed)
+        observation_log_likelihoods = self._observation_model.loglikelihood(proposed_state, observation)
 
         log_weights = self._transition_model.loglikelihood(state, proposed_state, inputs)
-        log_weights = log_weights + self._observation_model.loglikelihood(proposed_state, observation)
+        log_weights = log_weights + observation_log_likelihoods
         log_weights = log_weights - self._proposal_model.loglikelihood(proposed_state, state, inputs, observation)
         log_weights = log_weights + state.log_weights
 
         log_likelihood_increment = tf.math.reduce_logsumexp(log_weights, 1)
         log_likelihoods = state.log_likelihoods + log_likelihood_increment
         normalized_log_weights = normalize(log_weights, 1, state.n_particles, True)
-        return attr.evolve(proposed_state, weights=tf.math.exp(normalized_log_weights),
-                           log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)
+        return attr.evolve(proposed_state,
+                           weights=tf.math.exp(normalized_log_weights),
+                           log_weights=normalized_log_weights,
+                           log_likelihoods=log_likelihoods)
 
     @tf.function
     def _return(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor,

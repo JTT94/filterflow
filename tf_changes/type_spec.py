@@ -24,7 +24,6 @@ import collections
 import attr
 import numpy as np
 import six
-
 from tensorflow.python import _pywrap_utils
 from tensorflow.python.framework import composite_tensor
 from tensorflow.python.framework import dtypes

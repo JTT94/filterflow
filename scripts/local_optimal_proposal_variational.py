@@ -1,16 +1,12 @@
-import enum
 import os
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pykalman
 import tensorflow as tf
 from absl import flags, app
 from tensorflow_probability.python.internal import samplers
 from tqdm import tqdm
-
-# tf.config.set_visible_devices([], 'GPU')
 
 from filterflow.base import State
 from filterflow.models.optimal_proposal_linear_gaussian import make_filter
@@ -20,9 +16,11 @@ from filterflow.resampling.differentiable import PartiallyCorrectedRegularizedTr
 from filterflow.resampling.differentiable.loss import SinkhornLoss
 from filterflow.resampling.differentiable.optimized import OptimizedPointCloud
 from filterflow.resampling.differentiable.optimizer.sgd import SGD
-
 from scripts.optimal_proposal_common import get_transition_matrix, get_transition_covariance, get_data, \
     get_observation_covariance, get_observation_matrix, ResamplingMethodsEnum
+
+
+# tf.config.set_visible_devices([], 'GPU')
 
 
 @tf.function

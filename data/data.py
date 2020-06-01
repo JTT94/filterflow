@@ -5,8 +5,8 @@ from __future__ import print_function
 import pickle
 
 import tensorflow as tf
-import numpy as np
 from scipy.sparse import coo_matrix
+
 
 def sparse_pianoroll_to_dense(pianoroll, min_note, num_notes):
     """Converts a sparse pianoroll to a dense numpy array.
@@ -28,13 +28,14 @@ def sparse_pianoroll_to_dense(pianoroll, min_note, num_notes):
     inds = []
     for time, chord in enumerate(pianoroll):
         # Re-index the notes to start from min_note.
-        inds.extend((time, note-min_note) for note in chord)
+        inds.extend((time, note - min_note) for note in chord)
         shape = [num_timesteps, num_notes]
     values = [1.] * len(inds)
     sparse_pianoroll = coo_matrix(
-      (values, ([x[0] for x in inds], [x[1] for x in inds])),
-      shape=shape)
+        (values, ([x[0] for x in inds], [x[1] for x in inds])),
+        shape=shape)
     return sparse_pianoroll.toarray(), num_timesteps
+
 
 def create_pianoroll_dataset(path,
                              split,
@@ -87,18 +88,18 @@ def create_pianoroll_dataset(path,
             yield sparse_pianoroll_to_dense(sparse_pianoroll, min_note, num_notes)
 
     dataset = tf.data.Dataset.from_generator(
-      pianoroll_generator,
-      output_types=(tf.float64, tf.int64),
-      output_shapes=([None, num_notes], []))
+        pianoroll_generator,
+        output_types=(tf.float64, tf.int64),
+        output_shapes=([None, num_notes], []))
 
-    if repeat: 
+    if repeat:
         dataset = dataset.repeat()
-    if shuffle: 
+    if shuffle:
         dataset = dataset.shuffle(num_examples)
 
     # Batch sequences togther, padding them to a common length in time.
     dataset = dataset.padded_batch(batch_size,
-                                 padded_shapes=([None, num_notes], []))
+                                   padded_shapes=([None, num_notes], []))
 
     def process_pianoroll_batch(data, lengths):
         """Create mean-centered and time-major next-step prediction Tensors."""
@@ -117,10 +118,9 @@ def create_pianoroll_dataset(path,
         return inputs, targets, lengths
 
     dataset = dataset.map(process_pianoroll_batch,
-                        num_parallel_calls=num_parallel_calls)
+                          num_parallel_calls=num_parallel_calls)
     dataset = dataset.prefetch(num_examples)
 
     itr = tf.compat.v1.data.make_one_shot_iterator(dataset)
     inputs, targets, lengths = itr.get_next()
     return inputs, targets, lengths, tf.constant(mean, dtype=tf.float32)
-

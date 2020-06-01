@@ -1,33 +1,11 @@
-
-import os, sys
-
-import attr
-import datetime
-
-import numpy as np
-
 import tensorflow as tf
 import tensorflow_probability as tfp
 
+from filterflow.base import State
+from filterflow.observation.base import ObservationSampler
 from filterflow.smc import SMC
-from filterflow.base import State, StateWithMemory, StateSeries
-
-from filterflow.observation.base import ObservationModelBase, ObservationSampler
-from filterflow.observation.linear import LinearObservationSampler
-from filterflow.transition.random_walk import RandomWalkModel
-from filterflow.proposal import BootstrapProposalModel
 from filterflow.transition.base import TransitionModelBase
 
-from filterflow.resampling.criterion import NeffCriterion, AlwaysResample, NeverResample
-from filterflow.resampling.standard import SystematicResampler, MultinomialResampler
-from filterflow.resampling.differentiable import RegularisedTransform, CorrectedRegularizedTransform
-from filterflow.resampling.differentiable.ricatti.solver import RicattiSolver
-
-from filterflow.resampling.base import NoResampling
-
-from filterflow.state_space_model import StateSpaceModel
-
-from filterflow.constants import MIN_ABSOLUTE_WEIGHT
 
 def split_sei(x):
     S, E, I = tf.split(x, 3, axis=-1)

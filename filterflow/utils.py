@@ -20,7 +20,7 @@ def normalize(weights, axis, n, log=True):
     float_n = tf.cast(n, float)
 
     if log:
-        normalized_weights = _normalize(weights, axis, True)
+        normalized_weights = tf.clip_by_value(_normalize(weights, axis, True), tf.constant(-1e3), tf.constant(0.))
         stop_gradient_mask = normalized_weights < tf.maximum(MIN_ABSOLUTE_LOG_WEIGHT, MIN_RELATIVE_LOG_WEIGHT * float_n)
     else:
         normalized_weights = _normalize(weights, axis, False)

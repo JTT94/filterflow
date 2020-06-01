@@ -1,53 +1,38 @@
-import os, sys
+import os
+import sys
+
 # add to path
 sys.path.append("../")
 from absl import flags, app
 import attr
-import datetime
 
 import matplotlib.pyplot as plt
-import numpy as np
-from PIL import Image
-import seaborn
-import pickle
 
 import tensorflow as tf
-import tensorflow_addons as tfa
 import tensorflow_probability as tfp
 
 
 tf.config.set_visible_devices([], 'GPU')
 
-
-
-
-import pandas as pd
 import sonnet as snt
 
 from filterflow.smc import SMC
-from filterflow.base import State, StateWithMemory, StateSeries, DTYPE_TO_STATE_SERIES
+from filterflow.base import State
 
 from filterflow.observation.base import ObservationModelBase, ObservationSampler
-from filterflow.observation.linear import LinearObservationSampler
-from filterflow.transition.random_walk import RandomWalkModel
-from filterflow.proposal import BootstrapProposalModel
 from filterflow.proposal.base import ProposalModelBase
 from filterflow.transition.base import TransitionModelBase
-from filterflow.resampling.criterion import NeffCriterion, AlwaysResample, NeverResample, _neff, ResamplingCriterionBase
-from filterflow.resampling.standard import SystematicResampler, MultinomialResampler
-from filterflow.resampling.differentiable import RegularisedTransform, CorrectedRegularizedTransform, PartiallyCorrectedRegularizedTransform
+from filterflow.resampling.criterion import NeffCriterion, ResamplingCriterionBase
+from filterflow.resampling.standard import MultinomialResampler
+from filterflow.resampling.differentiable import RegularisedTransform
 
-from filterflow.resampling.base import NoResampling, ResamplerBase
+from filterflow.resampling.base import ResamplerBase
 from filterflow.utils import normalize
-from filterflow.state_space_model import StateSpaceModel
-
-
 
 ## Load Data
 
 import pickle
 
-import numpy as np
 from scipy.sparse import coo_matrix
 
 def sparse_pianoroll_to_dense(pianoroll, min_note, num_notes):

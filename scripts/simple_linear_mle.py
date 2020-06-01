@@ -1,11 +1,11 @@
 import os
 
-from absl import flags, app
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize
 import tensorflow as tf
+from absl import flags, app
+from scipy.optimize import minimize
 from tensorflow_probability.python.internal.samplers import split_seed
 from tqdm import tqdm
 

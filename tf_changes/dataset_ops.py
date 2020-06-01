@@ -27,7 +27,6 @@ import weakref
 import numpy as np
 import six
 from six.moves import queue as Queue  # pylint: disable=redefined-builtin
-
 from tensorflow.core.framework import graph_pb2
 from tensorflow.python import tf2
 from tensorflow.python.compat import compat
