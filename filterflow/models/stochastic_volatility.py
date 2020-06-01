@@ -5,32 +5,44 @@ from filterflow.base import State
 from filterflow.observation.base import ObservationModelBase
 from filterflow.proposal import BootstrapProposalModel
 from filterflow.smc import SMC
+from filterflow.transition.base import TransitionModelBase
 from filterflow.transition.random_walk import RandomWalkModel
 
 tfd = tfp.distributions
 
 
+class SVTransitionModel(TransitionModelBase):
+    """
+    X_t = mu + F(X_{t-1} - mu) + U_t,   U_t~N(0,transition_covariance)
+    """
+
+    def __init__(self, mu, F, transition_covariance_chol, name='SVTransitionModel'):
+        super(SVTransitionModel, self).__init__(name=name)
+        self._mu = mu
+        self._F = F
+        self._transition_covariance_chol = transition_covariance_chol
+
+    def sample(self, state: State, inputs: tf.Tensor, seed=None):
+        dist = tfd.MultivariateNormalTriL(self._mu - tf.linalg.matvec(self._F, self._mu),
+                                          self._transition_covariance_chol)
+        pushed_particles = tf.linalg.matvec(self._F, state.particles)
+        res = pushed_particles + dist.sample([state.batch_size, state.n_particles], seed=seed)
+        return res
+
+    def loglikelihood(self, prior_state: State, proposed_state: State, inputs: tf.Tensor):
+        pushed_particles = tf.linalg.matvec(self._F, prior_state.particles)
+        diff = proposed_state.particles - pushed_particles
+        dist = tfd.MultivariateNormalTriL(self._mu - tf.linalg.matvec(self._F, self._mu),
+                                          self._transition_covariance_chol)
+        return dist.log_prob(diff)
+
+
 class SVObservationModel(ObservationModelBase):
 
-    def __init__(self, B, log_psi, name='SVObservationModel'):
+    def __init__(self, observation_covariance_chol, name='SVObservationModel'):
         super(ObservationModelBase, self).__init__(name=name)
 
-        self.B = B
-        self.log_psi = log_psi
-        self.M = B.shape[0]
-
-    def generate_dist(self, state):
-        alpha = tf.clip_by_value(state.particles, -6., 0.)
-        e_alpha_2 = tf.exp(alpha / 2.)
-        e_alpha_2 = tf.reshape(e_alpha_2, [state.batch_size, state.n_particles, 1, state.dimension])
-        B_tilde = tf.reshape(self.B, [1, 1, self.B.shape[0], self.B.shape[1]]) * e_alpha_2
-        Cov = tf.linalg.matmul(B_tilde, B_tilde, transpose_b=True)
-        Psi = tf.reshape(tf.linalg.diag(tf.exp(self.log_psi)), [1, 1, self.M, self.M])
-        cov_chol = tf.linalg.cholesky(Cov + Psi, name='choleski')
-        obs_dist = tfd.MultivariateNormalTriL(tf.zeros(self.M, dtype=float), cov_chol,
-                                              name='distribution')
-
-        return obs_dist
+        self._dist = tfd.MultivariateNormalTriL(scale_tril=observation_covariance_chol)
 
     @tf.function
     def loglikelihood(self, state: State, observation: tf.Tensor):
@@ -43,8 +55,15 @@ class SVObservationModel(ObservationModelBase):
         :rtype: tf.Tensor
         """
         batch_size, n_particles = state.batch_size, state.n_particles
-        obs_dist = self.generate_dist(state)
-        log_prob = obs_dist.log_prob(observation)
+
+        exp_state = tf.exp(state.particles / 2)
+
+        scale = tfp.bijectors.ScaleMatvecDiag(exp_state)
+        dist = tfd.TransformedDistribution(distribution=self._dist, bijector=scale)
+
+        scaled_observation = tf.reshape(observation, [1, 1, -1])
+
+        log_prob = dist.log_prob(scaled_observation)
         return tf.reshape(log_prob, [batch_size, n_particles])
 
     @tf.function
@@ -55,23 +74,18 @@ class SVObservationModel(ObservationModelBase):
         :return: observartion
         :rtype: Observation
         """
-        obs_dist = self.generate_dist(state)
-        observation = obs_dist.sample()
+        exp_state = tf.exp(-state.particles / 2)
 
-        return observation
+        scaled_observation = self._dist.sample()
+
+        return tf.reshape(scaled_observation, [1, 1, -1]) * exp_state
 
 
-def make_filter(observation_matrix, transition_matrix, log_psi, B, transition_noise_chol, resampling_method,
-                resampling_criterion, transition_noise_bias=None):
-    dy, dx = observation_matrix
+def make_filter(mu, F, transition_noise_chol, observation_covariance_chol, resampling_method,
+                resampling_criterion):
+    observation_model = SVObservationModel(observation_covariance_chol)
 
-    if transition_noise_bias is None:
-        transition_noise_bias = tf.zeros(dx)
-
-    observation_model = SVObservationModel(B, log_psi)
-
-    transition_noise = tfp.distributions.MultivariateNormalTriL(transition_noise_bias, transition_noise_chol)
-    transition_model = RandomWalkModel(transition_matrix, transition_noise)
+    transition_model = SVTransitionModel(mu, F, transition_noise_chol)
     proposal_model = BootstrapProposalModel(transition_model)
 
     return SMC(observation_model, transition_model, proposal_model, resampling_criterion, resampling_method)

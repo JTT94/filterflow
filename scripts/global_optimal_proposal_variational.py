@@ -1,5 +1,6 @@
 import enum
 import os, sys
+
 sys.path.append('../')
 import matplotlib.pyplot as plt
 import numpy as np
@@ -140,31 +141,7 @@ def plot_variables(variables_df, filename, savefig):
         plt.show()
 
 
-def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), resampling_kwargs=None,
-         alpha=0.42, dx=10, dy=3, observation_covariance=1., dense=False, T=20, batch_size=1, n_particles=25,
-         data_seed=0, n_iter=50, savefig=False, filter_seed=0, use_xla=False, change_seed=True):
-    transition_matrix = get_transition_matrix(alpha, dx)
-    transition_covariance = get_transition_covariance(dx)
-    observation_matrix = get_observation_matrix(dx, dy, dense)
-    observation_covariance = get_observation_covariance(observation_covariance, dy)
-
-    resampling_method_enum = ResamplingMethodsEnum(resampling_method_value)
-
-    np_random_state = np.random.RandomState(seed=data_seed)
-    data, ll = get_data(transition_matrix, observation_matrix, transition_covariance, observation_covariance, T,
-                        np_random_state)
-    observation_dataset = tf.data.Dataset.from_tensor_slices(data)
-
-    if resampling_kwargs is None:
-        resampling_kwargs = {}
-
-    if resampling_neff == 0.:
-        resampling_criterion = NeverResample()
-    elif resampling_neff == 1.:
-        resampling_criterion = AlwaysResample()
-    else:
-        resampling_criterion = NeffCriterion(resampling_neff, True)
-
+def resampling_method_factory(resampling_method_enum, resampling_kwargs):
     if resampling_method_enum == ResamplingMethodsEnum.MULTINOMIAL:
         resampling_method = MultinomialResampler()
     elif resampling_method_enum == ResamplingMethodsEnum.SYSTEMATIC:
@@ -186,6 +163,20 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
         resampling_method = OptimizedPointCloud(optimizer, intermediate_resampler=regularized_resampler)
     else:
         raise ValueError(f'resampling_method_name {resampling_method_enum} is not a valid ResamplingMethodsEnum')
+    return resampling_method
+
+
+def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), resampling_kwargs=None,
+         alpha=0.42, dx=10, dy=3, observation_covariance=1., dense=False, T=20, batch_size=1, n_particles=25,
+         data_seed=0, n_data=50, n_iter=50, savefig=False, filter_seed=0, use_xla=False, change_seed=True):
+    transition_matrix = get_transition_matrix(alpha, dx)
+    transition_covariance = get_transition_covariance(dx)
+    observation_matrix = get_observation_matrix(dx, dy, dense)
+    observation_covariance = get_observation_covariance(observation_covariance, dy)
+
+    resampling_method_enum = ResamplingMethodsEnum(resampling_method_value)
+
+    np_random_state = np.random.RandomState(seed=data_seed)
 
     observation_matrix = tf.convert_to_tensor(observation_matrix)
     transition_covariance_chol = tf.linalg.cholesky(transition_covariance)
@@ -193,6 +184,36 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
 
     initial_particles = np_random_state.normal(0., 1., [batch_size, n_particles, dx]).astype(np.float32)
     initial_state = State(initial_particles)
+
+
+    if resampling_neff == 0.:
+        resampling_criterion = NeverResample()
+    elif resampling_neff == 1.:
+        resampling_criterion = AlwaysResample()
+    else:
+        resampling_criterion = NeffCriterion(resampling_neff, True)
+
+    optimal_smc = make_optimal_filter(observation_matrix, transition_matrix, observation_covariance_chol,
+                                      transition_covariance_chol, MultinomialResampler(), resampling_criterion)
+
+    if resampling_kwargs is None:
+        resampling_kwargs = {}
+
+    resampling_method = resampling_method_factory(resampling_method_enum, resampling_kwargs)
+
+    datas = []
+    lls = []
+    observation_datasets = []
+    optimal_lls = []
+    for _ in range(n_data):
+        data, ll = get_data(transition_matrix, observation_matrix, transition_covariance, observation_covariance, T,
+                            np_random_state)
+        datas.append(data)
+        lls.append(ll / T)
+        observation_dataset = tf.data.Dataset.from_tensor_slices(data)
+        observation_datasets.append(observation_dataset)
+        final_state = optimal_smc(initial_state, observation_dataset, T, None, True, filter_seed)
+        optimal_lls.append(final_state.log_likelihoods.numpy().mean() / T)
 
     log_phi_x_0 = 0.5 * tf.ones(dx)
     phi_y_0 = tf.zeros(dy)
@@ -204,11 +225,6 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
                       transition_covariance_chol, resampling_method, resampling_criterion,
                       log_phi_x, phi_y)
 
-    optimal_smc = make_optimal_filter(observation_matrix, transition_matrix, observation_covariance_chol,
-                                      transition_covariance_chol, MultinomialResampler(), resampling_criterion)
-    final_state = optimal_smc(initial_state, observation_dataset, T, None, True, filter_seed)
-    optimal_likelihood = tf.reduce_mean(final_state.log_likelihoods / T)
-
     def optimizer_maker(learning_rate):
         # tf.function doesn't like creating variables. This is a way to create them outside the graph
         # We can't reuse the same optimizer because it would be giving a warmed-up momentum to the ones run later
@@ -216,45 +232,63 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
         return optimizer
 
     initial_values = [log_phi_x_0, phi_y_0]
-    losses, ess_profiles = compare_learning_rates(smc, initial_state, observation_dataset, T, log_phi_x, phi_y,
-                                                  initial_values, n_iter, optimizer_maker, learning_rates, filter_seed,
-                                                  use_xla, change_seed)
+    losses_list = []
+    ess_profiles_list = []
+    mean_errors = []
+    for observation_dataset in observation_datasets:
+        losses, ess_profiles = compare_learning_rates(smc, initial_state, observation_dataset, T, log_phi_x, phi_y,
+                                                      initial_values, n_iter, optimizer_maker, learning_rates,
+                                                      filter_seed,
+                                                      use_xla, change_seed)
 
-    losses_df = pd.DataFrame(np.stack(losses).T, columns=np.log10(learning_rates))
-    ess_df = pd.DataFrame(np.stack(ess_profiles).T, columns=np.log10(learning_rates))
+        losses_df = pd.DataFrame(np.stack(losses).T, columns=np.log10(learning_rates))
+        ess_df = pd.DataFrame(np.stack(ess_profiles).T, columns=np.log10(learning_rates))
 
-    losses_df.columns.name = 'log learning rate'
-    losses_df.columns.epoch = 'epoch'
+        losses_df.columns.name = 'log learning rate'
+        losses_df.columns.epoch = 'epoch'
 
-    ess_df.columns.name = 'log learning rate'
-    ess_df.columns.epoch = 'epoch'
+        ess_df.columns.name = 'log learning rate'
+        ess_df.columns.epoch = 'epoch'
 
-    delta_phi_m_1 = tf.linalg.diag(tf.exp(-log_phi_x))
-    diff_cov = optimal_smc._proposal_model._sigma - delta_phi_m_1 @ transition_covariance
-    approx_error = tf.linalg.diag_part(diff_cov).numpy()
-    mean_error = np.sqrt(np.mean(approx_error ** 2))
+        losses_list.append(losses_df)
+        ess_profiles_list.append(ess_df)
 
-    mean_data = pd.DataFrame([[mean_error]], index=pd.MultiIndex.from_tuples([(batch_size, n_particles)]),
+        delta_phi_m_1 = tf.linalg.diag(tf.exp(-log_phi_x))
+        diff_cov = optimal_smc._proposal_model._sigma - delta_phi_m_1 @ transition_covariance
+        approx_error = tf.linalg.diag_part(diff_cov).numpy()
+        mean_error = np.sqrt(np.mean(approx_error ** 2))
+        mean_errors.append(mean_error)
+
+
+    losses_data = pd.concat(losses_list, axis=1)
+    ess_data = pd.concat(ess_profiles_list, axis=1)
+
+    mean_data = pd.DataFrame([[np.mean(mean_errors)]], index=pd.MultiIndex.from_tuples([(batch_size, n_particles)]),
                              columns=pd.MultiIndex.from_tuples([(resampling_method_enum.name, change_seed)]))
 
+    losses_data = losses_data.groupby(axis=1, level=0).mean()
+    ess_data = ess_data.groupby(axis=1, level=0).mean()
+
     # plot_losses(losses_df, resampling_method_enum.name, savefig, dx, dy, dense, T, change_seed)
-    plot_losses_vs_ess(losses_df, ess_df, resampling_method_enum.name, savefig, dx, dy, dense, T, n_particles,
-                       change_seed, batch_size, optimal_likelihood, ll / T, n_iter, mean_data)
+    plot_losses_vs_ess(losses_data, ess_data, resampling_method_enum.name, savefig, dx, dy, dense, T, n_particles,
+                       change_seed, batch_size, np.mean(optimal_lls), np.mean(lls), n_iter, mean_data)
+    print(tf.exp(log_phi_x))
 
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.REGULARIZED, 'resampling_method')
+flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.MULTINOMIAL, 'resampling_method')
 flags.DEFINE_float('epsilon', 0.5, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.9, 'scaling')
 flags.DEFINE_float('log_learning_rate_min', -2, 'log_learning_rate_min')
 flags.DEFINE_float('log_learning_rate_max', -2, 'log_learning_rate_max')
-flags.DEFINE_integer('n_learning_rates', 1, 'log_learning_rate_max')
+flags.DEFINE_integer('n_learning_rates', 1, 'log_learning_rate_max', lower_bound=1, upper_bound=1)
+flags.DEFINE_integer('n_data', 50, 'n_data', lower_bound=1)
 flags.DEFINE_boolean('change_seed', True, 'change seed between each gradient descent step')
-flags.DEFINE_float('convergence_threshold', 1e-3, 'convergence_threshold')
+flags.DEFINE_float('convergence_threshold', 1e-4, 'convergence_threshold')
 flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)
-flags.DEFINE_integer('batch_size', 4, 'batch_size', lower_bound=1)
+flags.DEFINE_integer('batch_size', 25, 'batch_size', lower_bound=1)
 flags.DEFINE_integer('n_iter', 250, 'n_iter', lower_bound=10)
 flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
 flags.DEFINE_integer('dx', 50, 'dx', lower_bound=1)
@@ -274,6 +308,7 @@ def flag_main(argb):
     main(FLAGS.resampling_method,
          resampling_neff=FLAGS.resampling_neff,
          T=FLAGS.T,
+         n_data=FLAGS.n_data,
          n_particles=FLAGS.n_particles,
          batch_size=FLAGS.batch_size,
          savefig=FLAGS.savefig,

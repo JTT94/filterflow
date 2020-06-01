@@ -12,6 +12,7 @@ class ResamplingMethodsEnum(enum.IntEnum):
     VARIANCE_CORRECTED = 4
     OPTIMIZED = 5
     KALMAN = 6
+    CORRECTED = 7
 
 
 
