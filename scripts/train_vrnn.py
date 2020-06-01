@@ -166,8 +166,8 @@ def create_pianoroll_dataset(path,
     inputs, targets, lengths = itr.get_next()
     return inputs, targets, lengths, tf.constant(mean, dtype=tf.float32)
 
-def fn_identifier(initial_lr, decay, steps, method):
-    return "method_{3}__lr0_{0}__decay_{1}__steps_{2}".format(initial_lr, decay, steps, method)
+def fn_identifier(initial_lr, decay, steps, method, data_name):
+    return "method_{3}__lr0_{0}__decay_{1}__steps_{2}_data_{4}".format(initial_lr, decay, steps, method,data_name)
 
 def pickle_obj(obj, file_path):
     with open(file_path, 'wb') as handle:
@@ -438,12 +438,10 @@ def main(run_method,
          data_seed=0,
          filter_seed=1,
          fixed_seed = False,
-         out_dir='./'):
-
-    data_dir = "../data/piano_data"
-    path = os.path.join(data_dir, 'jsb.pkl')
-
-    inputs_tensor, targets_tensor, lens, mean = create_pianoroll_dataset(path, split='train', batch_size=1)
+         out_dir='./',
+         data_fp = '../data/data/piano_data/jsb.pkl'):
+    
+    inputs_tensor, targets_tensor, lens, mean = create_pianoroll_dataset(data_fp, split='train', batch_size=1)
 
     T = targets_tensor.shape.as_list()[0]
     observation_size = targets_tensor.shape.as_list()[-1]
@@ -629,7 +627,6 @@ def main(run_method,
                     loss_tensor_array = loss_tensor_array.write(step-1, loss)
                     grad_tensor_array = grad_tensor_array.write(step-1, max_grad)
                     time_tensor_array = time_tensor_array.write(step-1, toc)
-                    pickle_obj(loss_array, os.path.join(out_dir, filename))
 
                     
             return (loss_tensor_array.stack(), grad_tensor_array.stack(), 
@@ -638,12 +635,12 @@ def main(run_method,
             
         return train_niter(smc, tf.constant(n_iter))
 
-    def run_block(smc, method, n_iter, initial_lr, decay, steps, out_dir, col = 'blue', warnup=100, force =False):
+    def run_block(smc, method, n_iter, initial_lr, decay, steps, out_dir, col = 'blue', warnup=100, force =False, data_name=None):
         if not os.path.isdir(out_dir):
             os.mkdir(out_dir)
         optimizer = make_optimizer(initial_learning_rate = initial_lr, 
                                 decay_steps=steps, decay_rate=decay, staircase=True)
-        key = fn_identifier(initial_lr, decay, steps, method)
+        key = fn_identifier(initial_lr, decay, steps, method, data_name)
         filename = "vrnn_loss_{0}.pkl".format(key)
         filepath= os.path.join(out_dir, filename)
 
@@ -697,12 +694,14 @@ def main(run_method,
         return multi_loss_array
     
     print(run_method)
+    data_name = os.path.splitext(os.path.basename(data_fp))[0]
+
     if run_method == 'mult':
-        multi_array = run_block(multinomial_smc, 'mult', n_iter, initial_lr, decay, steps, out_dir, col = 'blue')
+        multi_array = run_block(multinomial_smc, 'mult', n_iter, initial_lr, decay, steps, out_dir, col = 'blue', data_name=data_name)
 
     if run_method == 'reg':
         print(resampling_method)
-        reg_array = run_block(regularized_smc, 'reg', n_iter, initial_lr, decay, steps, out_dir, col = 'green')
+        reg_array = run_block(regularized_smc, 'reg', n_iter, initial_lr, decay, steps, out_dir, col = 'green', data_name=data_name)
     #both_key = fn_identifier(initial_lr, decay, steps, 'both')
 
     #fig, ax = plt.subplots(figsize=(10, 5))
@@ -739,8 +738,10 @@ flags.DEFINE_integer('data_seed', 0, 'data_seed')
 flags.DEFINE_string('out_dir', './', 'out_dir')
 flags.DEFINE_string('resampling_method', 'reg', 'resampling method')
 flags.DEFINE_boolean('fixed_filter_seed', False, 'fixed_filter_seed')
+flags.DEFINE_string('data_fp', '../data/data/piano_data/jsb.pkl', 'data_fp')
 
 def flag_main(argv):
+    print('data_fp: {0}'.format(FLAGS.data_fp))
     print('resampling_method: {0}'.format(FLAGS.resampling_method))
     print('epsilon: {0}'.format(FLAGS.epsilon))
     print('resampling_neff: {0}'.format(FLAGS.resampling_neff))
@@ -776,7 +777,8 @@ def flag_main(argv):
          data_seed = FLAGS.data_seed,
          filter_seed = FLAGS.filter_seed,
          fixed_seed = FLAGS.fixed_filter_seed,
-         out_dir=FLAGS.out_dir)
+         out_dir=FLAGS.out_dir,
+         data_fp= FLAGS.data_fp)
 
 if __name__ == "__main__":
     app.run(flag_main)
