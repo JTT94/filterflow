@@ -1,7 +1,7 @@
 import enum
 
-import pykalman
 import numpy as np
+import pykalman
 
 from scripts.base import kf_loglikelihood
 

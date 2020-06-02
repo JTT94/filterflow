@@ -19,8 +19,6 @@ class LearnableProposalModel(ProposalModelBase):
         super(LearnableProposalModel, self).__init__(name=name)
         self._transition_matrix = transition_matrix
 
-        d_x = transition_matrix.shape[0]
-
         self._log_phi_x = log_phi_x
         self._phi_y = phi_y
 
@@ -43,6 +41,7 @@ class LearnableProposalModel(ProposalModelBase):
         proposed_particles = proposal_dist.sample(seed=seed)
         return attr.evolve(state, particles=proposed_particles)
 
+    @tf.function
     def loglikelihood(self, proposed_state: State, state: State, inputs: tf.Tensor, observation: tf.Tensor):
         """Interface method for particle proposal
         :param proposed_state: State

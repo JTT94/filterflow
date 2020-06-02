@@ -1,19 +1,14 @@
-import enum
-import os, sys
+import os
+import sys
 
 sys.path.append('../')
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pykalman
 import tensorflow as tf
 from absl import flags, app
-from matplotlib import transforms
-from tensorflow_probability.python.internal import samplers
 from tensorflow_probability.python.internal.samplers import split_seed
 from tqdm import tqdm
-
-tf.config.set_visible_devices([], 'GPU')
 
 from filterflow.base import State
 from filterflow.models.optimal_proposal_linear_gaussian import make_filter, make_optimal_filter
@@ -39,7 +34,7 @@ def routine(pf, initial_state, observations_dataset, T, log_phi_x, phi_y, seed):
 
 def get_gradient_descent_function():
     # This is a trick because tensorflow doesn't allow you to create variables inside a decorated function
-
+    @tf.function
     def gradient_descent(pf, initial_state, observations_dataset, T, n_iter, optimizer, log_phi_x, phi_y,
                          initial_values, change_seed, seed):
         variables = [log_phi_x, phi_y]
@@ -72,8 +67,7 @@ def compare_learning_rates(pf, initial_state, observations_dataset, T, log_phi_x
     ess_profiles = []
     for learning_rate in tqdm(learning_rates):
         optimizer = optimizer_maker(learning_rate=learning_rate)
-        gradient_descent_function = tf.function(get_gradient_descent_function(),
-                                                experimental_compile=use_xla)
+        gradient_descent_function = get_gradient_descent_function()
         final_variables, loss_profile, ess_profile = gradient_descent_function(pf, initial_state, observations_dataset,
                                                                                T, n_iter,
                                                                                optimizer, log_phi_x, phi_y,
@@ -100,7 +94,7 @@ def plot_losses(loss_profiles_df, filename, savefig, dx, dy, dense, T, change_se
 
 
 def plot_losses_vs_ess(loss_profiles_df, ess_profiles_df, filename, savefig, dx, dy, dense, T, n_particles, change_seed,
-                       batch_size, optimal_filter_val, kalman_val, n_iter, mse_table):
+                       batch_size, optimal_filter_val, kalman_val, n_iter, mse_table, n_data):
     fig, ax = plt.subplots(figsize=(5, 3))
     loss_profiles_df.style.float_format = '${:,.1f}'.format
     loss_profiles_df.plot(ax=ax, legend=False)
@@ -118,7 +112,7 @@ def plot_losses_vs_ess(loss_profiles_df, ess_profiles_df, filename, savefig, dx,
 
     # ax.legend()
     fig.tight_layout()
-    filename = f'global_variational_different_lr_loss_ess_{filename}_N_{n_particles}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}_change_seed_{change_seed}_batch_size_{batch_size}'
+    filename = f'global_variational_different_lr_loss_ess_{filename}_N_{n_particles}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}_change_seed_{change_seed}_batch_size_{batch_size}_ndata_{n_data}'
     if savefig:
         fig.savefig(os.path.join('./charts/',
                                  filename + '.png'))
@@ -271,29 +265,29 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
 
     # plot_losses(losses_df, resampling_method_enum.name, savefig, dx, dy, dense, T, change_seed)
     plot_losses_vs_ess(losses_data, ess_data, resampling_method_enum.name, savefig, dx, dy, dense, T, n_particles,
-                       change_seed, batch_size, np.mean(optimal_lls), np.mean(lls), n_iter, mean_data)
+                       change_seed, batch_size, np.mean(optimal_lls), np.mean(lls), n_iter, mean_data, n_data)
     print(tf.exp(log_phi_x))
 
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.MULTINOMIAL, 'resampling_method')
+flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.REGULARIZED, 'resampling_method')
 flags.DEFINE_float('epsilon', 0.5, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.9, 'scaling')
 flags.DEFINE_float('log_learning_rate_min', -2, 'log_learning_rate_min')
 flags.DEFINE_float('log_learning_rate_max', -2, 'log_learning_rate_max')
 flags.DEFINE_integer('n_learning_rates', 1, 'log_learning_rate_max', lower_bound=1, upper_bound=1)
-flags.DEFINE_integer('n_data', 50, 'n_data', lower_bound=1)
+flags.DEFINE_integer('n_data', 10, 'n_data', lower_bound=1)
 flags.DEFINE_boolean('change_seed', True, 'change seed between each gradient descent step')
 flags.DEFINE_float('convergence_threshold', 1e-4, 'convergence_threshold')
 flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)
-flags.DEFINE_integer('batch_size', 25, 'batch_size', lower_bound=1)
-flags.DEFINE_integer('n_iter', 250, 'n_iter', lower_bound=10)
+flags.DEFINE_integer('batch_size', 4, 'batch_size', lower_bound=1)
+flags.DEFINE_integer('n_iter', 150, 'n_iter', lower_bound=10)
 flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
-flags.DEFINE_integer('dx', 50, 'dx', lower_bound=1)
+flags.DEFINE_integer('dx', 10, 'dx', lower_bound=1)
 flags.DEFINE_integer('dy', 1, 'dy', lower_bound=1)
-flags.DEFINE_integer('T', 150, 'T', lower_bound=1)
+flags.DEFINE_integer('T', 100, 'T', lower_bound=1)
 flags.DEFINE_boolean('savefig', True, 'Save fig')
 flags.DEFINE_boolean('use_xla', False, 'Use XLA (experimental)')
 flags.DEFINE_boolean('dense', False, 'dense')
