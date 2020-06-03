@@ -2,7 +2,7 @@ import numpy as np
 import ot
 import tensorflow as tf
 
-from filterflow.resampling.differentiable.regularized_transport.plan import transport, sinkhorn_potentials
+from filterflow.resampling.differentiable.regularized_transport.plan import transport
 from filterflow.resampling.differentiable.regularized_transport.utils import diameter
 from filterflow.utils import normalize
 

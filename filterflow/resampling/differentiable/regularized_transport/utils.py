@@ -8,10 +8,10 @@ def _fillna(tensor):
 
 @tf.function
 def diameter(x, y):
-    diameter_x = tf.reduce_max(tf.math.reduce_std(x, -1), -1)
-    diameter_y = tf.reduce_max(tf.math.reduce_std(y, -1), -1)
-
-    return tf.maximum(diameter_x, diameter_y)
+    diameter_x = tf.reduce_max(tf.math.reduce_std(x, 1), -1)
+    diameter_y = tf.reduce_max(tf.math.reduce_std(y, 1), -1)
+    res = tf.maximum(diameter_x, diameter_y)
+    return tf.where(res == 0., 1., res)
 
 
 @tf.function

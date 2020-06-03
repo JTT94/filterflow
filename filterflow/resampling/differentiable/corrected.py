@@ -37,7 +37,7 @@ class CorrectedRegularizedTransform(ResamplerBase, metaclass=abc.ABCMeta):
         self.scaling = tf.cast(scaling, float)
         self.propagate_correction_gradient = propagate_correction_gradient
         if ricatti_solver is None:
-            self.ricatti_solver = PetkovSolver(tf.constant(10))
+            self.ricatti_solver = PetkovSolver(tf.constant(50))
         else:
             self.ricatti_solver = ricatti_solver
         super(CorrectedRegularizedTransform, self).__init__(name=name)

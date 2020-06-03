@@ -52,7 +52,6 @@ class SMC(Module):
         if seed1 is None or seed2 is None:
             temp_seed = tf.random.uniform((), 0, 2 ** 16, tf.int32)
             seed1, seed2 = samplers.split_seed(temp_seed, n=2, salt='propose_and_weight')
-        # check if resampling is required
         resampling_flag, ess = self._resampling_criterion.apply(state)
         # update running average efficient sample size
         state = attr.evolve(state, ess=ess / float_t_1 + state.ess * (float_t / float_t_1))
@@ -80,7 +79,6 @@ class SMC(Module):
             tf.stop_gradient(centered_reward) * prior_state.log_weights, 1)
         return attr.evolve(new_state, resampling_correction=resampling_correction)
 
-    @tf.function
     def propose_and_weight(self, state: State, observation: tf.Tensor,
                            inputs: tf.Tensor, seed=None):
         """
@@ -93,17 +91,20 @@ class SMC(Module):
         :return: Updated weights
         """
         proposed_state = self._proposal_model.propose(state, inputs, observation, seed=seed)
+        observation_log_likelihoods = self._observation_model.loglikelihood(proposed_state, observation)
 
         log_weights = self._transition_model.loglikelihood(state, proposed_state, inputs)
-        log_weights = log_weights + self._observation_model.loglikelihood(proposed_state, observation)
+        log_weights = log_weights + observation_log_likelihoods
         log_weights = log_weights - self._proposal_model.loglikelihood(proposed_state, state, inputs, observation)
         log_weights = log_weights + state.log_weights
 
         log_likelihood_increment = tf.math.reduce_logsumexp(log_weights, 1)
         log_likelihoods = state.log_likelihoods + log_likelihood_increment
         normalized_log_weights = normalize(log_weights, 1, state.n_particles, True)
-        return attr.evolve(proposed_state, weights=tf.math.exp(normalized_log_weights),
-                           log_weights=normalized_log_weights, log_likelihoods=log_likelihoods)
+        return attr.evolve(proposed_state,
+                           weights=tf.math.exp(normalized_log_weights),
+                           log_weights=normalized_log_weights,
+                           log_likelihoods=log_likelihoods)
 
     @tf.function
     def _return(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor,
@@ -156,7 +157,6 @@ class SMC(Module):
         final_state, _ = self._return(initial_state, observation_series, n_observations, inputs_series, seed)
         return final_state
 
-    @tf.function
     def __call__(self, initial_state: State, observation_series: tf.data.Dataset, n_observations: tf.Tensor,
                  inputs_series: tf.data.Dataset = None, return_final=False, seed=None):
         """

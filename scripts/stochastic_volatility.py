@@ -1,5 +1,6 @@
 import enum
-import os, sys
+import os
+import sys
 
 sys.path.append('../')
 import matplotlib.pyplot as plt
@@ -21,7 +22,6 @@ from filterflow.resampling.differentiable import PartiallyCorrectedRegularizedTr
 from filterflow.resampling.differentiable.loss import SinkhornLoss
 from filterflow.resampling.differentiable.optimized import OptimizedPointCloud
 from filterflow.resampling.differentiable.optimizer.sgd import SGD
-from filterflow.utils import mean, std
 import quandl
 
 

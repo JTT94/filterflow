@@ -4,6 +4,7 @@ import tensorflow_probability as tfp
 from filterflow.base import State
 from filterflow.transition.base import TransitionModelBase
 
+
 class LinearTransitionModel1d(TransitionModelBase):
     def __init__(self, scalar: tf.Tensor, add_term: tf.Tensor, noise: tfp.distributions.Distribution, name='RandomWalkModel'):
         super(LinearTransitionModel1d, self).__init__(name=name)

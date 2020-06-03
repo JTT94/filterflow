@@ -1,25 +1,20 @@
 import os
 
-from absl import flags, app
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize
 import tensorflow as tf
+from absl import flags, app
 from tensorflow_probability.python.internal.samplers import split_seed
-from tqdm import tqdm
-import seaborn as sns
 
 from filterflow.base import State
-from filterflow.models.simple_linear_gaussian import make_filter
 from filterflow.resampling import MultinomialResampler, SystematicResampler, StratifiedResampler, RegularisedTransform, \
     CorrectedRegularizedTransform
-from filterflow.resampling.criterion import NeverResample, AlwaysResample, NeffCriterion
 from filterflow.resampling.differentiable import PartiallyCorrectedRegularizedTransform
 from filterflow.resampling.differentiable.loss import SinkhornLoss
 from filterflow.resampling.differentiable.optimized import OptimizedPointCloud
 from filterflow.resampling.differentiable.optimizer.sgd import SGD
-from scripts.simple_linear_common import get_data, kf_loglikelihood, ResamplingMethodsEnum
+from scripts.simple_linear_common import ResamplingMethodsEnum
 
 
 def resampling_method_factory(resampling_method_enum, resampling_kwargs):

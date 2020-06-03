@@ -4,7 +4,7 @@ import tensorflow as tf
 from filterflow.base import State
 from filterflow.constants import MIN_RELATIVE_LOG_WEIGHT
 from filterflow.observation.base import ObservationModelBase
-from filterflow.proposal.auxiliary_proposal import AuxiliaryProposal
+from filterflow.proposal import ProposalModelBase
 from filterflow.resampling.base import ResamplerBase
 from filterflow.resampling.criterion import ResamplingCriterionBase
 from filterflow.smc import SMC
@@ -14,11 +14,12 @@ from filterflow.utils import normalize
 
 class AuxiliaryParticleFilter(SMC):
     def __init__(self, observation_model: ObservationModelBase, transition_model: TransitionModelBase,
-                 proposal_model: AuxiliaryProposal, resampling_criterion: ResamplingCriterionBase,
+                 proposal_model: ProposalModelBase, resampling_criterion: ResamplingCriterionBase,
                  resampling_method: ResamplerBase, name='AuxiliaryParticleFilter'):
         super(AuxiliaryParticleFilter, self).__init__(observation_model, transition_model,
                                                       proposal_model, resampling_criterion, resampling_method,
                                                       name=name)
+        raise NotImplementedError("This is not yet implemented")
 
     @tf.function
     def propose_and_weight(self, state: State, observation: tf.Tensor,

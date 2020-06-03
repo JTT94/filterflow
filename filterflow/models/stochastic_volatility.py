@@ -6,7 +6,6 @@ from filterflow.observation.base import ObservationModelBase
 from filterflow.proposal import BootstrapProposalModel
 from filterflow.smc import SMC
 from filterflow.transition.base import TransitionModelBase
-from filterflow.transition.random_walk import RandomWalkModel
 
 tfd = tfp.distributions
 

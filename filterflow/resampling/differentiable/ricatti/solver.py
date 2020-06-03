@@ -335,7 +335,7 @@ def _solve_petkov(A, transport_matrix, n, n_iter):
     ode_fun = make_ode_fun(A, transport_matrix)
 
     ode_res = tf.reduce_mean(tf.abs(ode_fun(0., delta)))
-    mask = tf.reshape(ode_res < 1e-2, [-1, 1, 1])
+    mask = tf.reshape(ode_res < 1e-1, [-1, 1, 1])
 
     delta = tf.where(mask, delta, 0.)
 
