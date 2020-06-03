@@ -1,7 +1,10 @@
 import enum
+from scripts.base import kf_loglikelihood
 
 import numpy as np
 import pykalman
+
+_ = kf_loglikelihood
 
 
 class ResamplingMethodsEnum(enum.IntEnum):
@@ -13,9 +16,6 @@ class ResamplingMethodsEnum(enum.IntEnum):
     OPTIMIZED = 5
     KALMAN = 6
     CORRECTED = 7
-
-
-
 
 
 def get_data(transition_matrix, observation_matrix, transition_covariance, observation_covariance, T=100,

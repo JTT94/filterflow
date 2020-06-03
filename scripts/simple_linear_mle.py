@@ -46,7 +46,7 @@ def values_and_gradient(x, modifiable_transition_matrix, pf, initial_state,
         # (will be corrected with stateless operations in next tf versions)
         ll, ll_grad = routine(pf, initial_state, False, observations_dataset, T,
                               modifiable_transition_matrix, seed)
-    return -ll, ll_grad
+    return -ll, -tf.linalg.diag_part(ll_grad)
 
 
 # DO NOT DECORATE
@@ -75,51 +75,20 @@ def values_and_gradient_finite_diff(x, modifiable_transition_matrix, pf, initial
 
 
 @tf.function
-def routine(pf, initial_state, observations_dataset, T, var, seed):
-    with tf.GradientTape() as tape:
-        tape.watch([var])
-        log_likelihood = pf(initial_state, observations_dataset, T, None, return_final=True, seed=seed)
-        res = -log_likelihood
-    return res, tape.gradient(res, [var])
-
-
-def get_gradient_descent_function():
-    # This is a trick because tensorflow doesn't allow you to create variables inside a decorated function
-
-    def gradient_descent(pf, initial_state, observations_dataset, T, n_iter, optimizer, var,
-                         x0, seed, change_seed):
-        reset_operations = var.assign(x0)
-        loss = tf.TensorArray(dtype=tf.float32, size=n_iter, dynamic_size=False)
-
-        filter_seed, seed = split_seed(seed, n=2, salt='gradient_descent')
-
-        with tf.control_dependencies(reset_operations):
-            for i in tf.range(n_iter):
-
-                loss_value, grads = routine(pf, initial_state, observations_dataset, T, var,
-                                            seed)
-                if change_seed:
-                    filter_seed, seed = split_seed(filter_seed, n=2)
-
-                loss = loss.write(tf.cast(i, tf.int32), loss_value)
-                optimizer.apply_gradients(zip(grads, [var]))
-        return tf.convert_to_tensor(var), loss.stack()
-
-    return gradient_descent
-
-
-def compare_learning_rates(pf, initial_state, observations_dataset, T, var, x0,
-                           n_iter, optimizer_maker, learning_rates, filter_seed, change_seed):
-    loss_profiles = []
-    final_variables_list = []
-    for learning_rate in tqdm(learning_rates):
-        optimizer = optimizer_maker(learning_rate=learning_rate)
-        gradient_descent_function = tf.function(get_gradient_descent_function())
-        final_variables, loss_profile = gradient_descent_function(pf, initial_state, observations_dataset, T, n_iter,
-                                                                  optimizer, var, x0, filter_seed, change_seed)
-        loss_profiles.append(loss_profile.numpy() / T)
-        final_variables_list.append(final_variables.numpy())
-    return loss_profiles, final_variables_list
+def gradient_descent(loss_fun, x0, observation_dataset, learning_rate, n_iter, filter_seed, change_seed):
+    loss = tf.TensorArray(dtype=tf.float32, size=n_iter + 1, dynamic_size=False)
+    val = tf.identity(x0)
+    filter_seed, seed = split_seed(filter_seed, n=2, salt='gradient_descent')
+    for i in tf.range(n_iter):
+        loss_val, gradient_val = loss_fun(val, observation_dataset, seed=seed)
+        if change_seed:
+            filter_seed, seed = split_seed(filter_seed, n=2)
+        loss = loss.write(tf.cast(i, tf.int32), loss_val)
+        val -= learning_rate * gradient_val
+        tf.print('\rStep ', i + 1, '/', n_iter, end='')
+    loss_val, gradient_val = loss_fun(val, observation_dataset, seed)
+    loss = loss.write(tf.cast(n_iter, tf.int32), loss_val)
+    return val, loss.stack()
 
 
 def plot_loss(data, final_val, filename, savefig):
@@ -138,8 +107,8 @@ def plot_loss(data, final_val, filename, savefig):
 
 def main(resampling_method_value, resampling_neff, resampling_kwargs=None,
          T=100, batch_size=1, n_particles=25,
-         data_seed=0, filter_seed=1, learning_rates=(1e-3, 1e-2),
-         n_iter=50, savefig=False, batch_data=1, change_seed=False):
+         data_seed=0, filter_seed=1, learning_rate=0.001, n_iter=50,
+         savefig=False, use_xla=False, batch_data=1, assume_differentiable=False, change_seed=False):
     transition_matrix = 0.5 * np.eye(2, dtype=np.float32)
     transition_covariance = np.eye(2, dtype=np.float32)
     observation_matrix = np.eye(2, dtype=np.float32)
@@ -204,48 +173,44 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None,
 
     x0 = tf.constant([0.25, 0.25])
 
-    def kf_likelihood_fun(val, data):
-        import copy
-        kf_copy = copy.copy(kf)
-        kf_copy.transition_matrices = val.reshape(2, 2)
-        return -kf_loglikelihood(kf_copy, data)
-
-    def optimizer_maker(learning_rate):
-        # tf.function doesn't like creating variables. This is a way to create them outside the graph
-        # We can't reuse the same optimizer because it would be giving a warmed-up momentum to the ones run later
-        optimizer = tf.optimizers.SGD(learning_rate=learning_rate)
-        return optimizer
+    if resampling_method.DIFFERENTIABLE or assume_differentiable:
+        loss_fun = lambda x, observation_dataset, seed: values_and_gradient(x, modifiable_transition_matrix, smc,
+                                                                            initial_state, observation_dataset, T,
+                                                                            seed)
+    else:
+        loss_fun = lambda x, observation_dataset, seed: values_and_gradient_finite_diff(x, modifiable_transition_matrix,
+                                                                                        smc,
+                                                                                        initial_state,
+                                                                                        observation_dataset, T,
+                                                                                        seed)
 
     final_values = []
     losses = []
     kalman_params = []
 
+    def kf_likelihood_fun(val, data):
+        import copy
+        kf_copy = copy.copy(kf)
+        kf_copy.transition_matrices = np.diag(val)
+        return -kf_loglikelihood(kf_copy, data)
+
+    fun = tf.function(loss_fun, experimental_compile=use_xla)
+
     for observation_dataset, np_dataset in tqdm(zip(data, np_data), total=batch_data):
-        losses_for_dataset, final_values_for_dataset = compare_learning_rates(smc, initial_state, observation_dataset,
-                                                                              tf.constant(T),
-                                                                              modifiable_transition_matrix,
-                                                                              tf.linalg.diag(x0), tf.constant(n_iter),
-                                                                              optimizer_maker,
-                                                                              learning_rates,
-                                                                              tf.constant(filter_seed),
-                                                                              tf.constant(change_seed))
-        final_values.append(final_values_for_dataset)
-        losses.append(losses_for_dataset)
-        kf_params = minimize(kf_likelihood_fun, np.diag(x0.numpy()).squeeze(), args=(np_dataset,))
-        kalman_params.append(kf_params.x.reshape(2, 2))
+        final_value, loss = gradient_descent(fun, x0, observation_dataset, tf.constant(learning_rate),
+                                             tf.constant(n_iter), tf.constant(filter_seed), tf.constant(change_seed))
+        final_values.append(final_value.numpy())
+        losses.append(loss.numpy())
+        kf_params = minimize(kf_likelihood_fun, x0.numpy(), args=(np_dataset,))
+        kalman_params.append(kf_params.x)
 
-    losses = np.array(losses)
-    final_values = np.array(final_values)
-
-    plt.plot(losses.T)
-    plt.show()
-
+    final_values = np.vstack(final_values)
     kalman_params = np.vstack(kalman_params)
 
     df = pd.DataFrame(final_values - kalman_params, columns=[r'$\theta_1', r'$\theta_2'])
     parameters_diff = np.mean(np.square(df), 0)
     if savefig:
-        filename = f'theta_diff_{resampling_method_enum.name}_batch_size_{batch_size}_batch_data_{batch_data}_changeseed_{change_seed}.csv'
+        filename = f'theta_diff_{resampling_method_enum.name}_batch_size_{batch_size}_N_{n_particles}_batch_data_{batch_data}_changeseed_{change_seed}.csv'
         parameters_diff.to_csv(os.path.join('./tables/', filename),
                                float_format='%.5f')
     else:
@@ -256,24 +221,22 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None,
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.MULTINOMIAL, 'resampling_method')
-flags.DEFINE_float('epsilon', 0.5, 'epsilon')
+flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.REGULARIZED, 'resampling_method')
+flags.DEFINE_float('epsilon', 0.25, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.85, 'scaling')
-flags.DEFINE_float('log_learning_rate_min', -2., 'log_learning_rate_min')
-flags.DEFINE_float('log_learning_rate_max', -2., 'log_learning_rate_max')
-flags.DEFINE_integer('n_learning_rates', 1, 'log_learning_rate_max')
-flags.DEFINE_float('convergence_threshold', 1e-3, 'convergence_threshold')
+flags.DEFINE_float('learning_rate', 1e-4, 'learning_rate', upper_bound=1e-1)
+flags.DEFINE_float('convergence_threshold', 1e-5, 'convergence_threshold')
 flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)
-flags.DEFINE_integer('batch_size', 1, 'batch_size', lower_bound=1)
+flags.DEFINE_integer('batch_size', 4, 'batch_size', lower_bound=1)
 flags.DEFINE_integer('n_iter', 100, 'n_iter', lower_bound=10)
 flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
 flags.DEFINE_integer('T', 150, 'T', lower_bound=1)
 flags.DEFINE_boolean('savefig', True, 'Save fig')
-flags.DEFINE_integer('batch_data', 2, 'Data samples', lower_bound=1)
+flags.DEFINE_integer('batch_data', 10, 'Data samples', lower_bound=1)
 flags.DEFINE_boolean('use_xla', False, 'Use XLA (experimental)')
 flags.DEFINE_boolean('assume_differentiable', True, 'Assume that all schemes are differentiable')
-flags.DEFINE_boolean('change_seed', False, 'change seed between each gradient descent step')
+flags.DEFINE_boolean('change_seed', True, 'change seed between each gradient descent step')
 flags.DEFINE_integer('seed', 25, 'seed')
 
 
@@ -295,23 +258,22 @@ def flag_main(argb):
     print('batch_data: {0}'.format(FLAGS.batch_data))
     print('change_seed: {0}'.format(FLAGS.change_seed))
 
-    learning_rates = np.logspace(FLAGS.log_learning_rate_min, FLAGS.log_learning_rate_max, FLAGS.n_learning_rates,
-                                 base=10, dtype=np.float32)
-
     main(FLAGS.resampling_method,
          resampling_neff=FLAGS.resampling_neff,
          T=FLAGS.T,
          n_particles=FLAGS.n_particles,
          batch_size=FLAGS.batch_size,
          savefig=FLAGS.savefig,
-         learning_rates=learning_rates,
+         learning_rate=FLAGS.learning_rate,
          n_iter=FLAGS.n_iter,
          resampling_kwargs=dict(epsilon=FLAGS.epsilon,
                                 scaling=FLAGS.scaling,
                                 convergence_threshold=FLAGS.convergence_threshold,
                                 max_iter=FLAGS.max_iter),
          filter_seed=FLAGS.seed,
+         use_xla=FLAGS.use_xla,
          batch_data=FLAGS.batch_data,
+         assume_differentiable=FLAGS.assume_differentiable,
          change_seed=FLAGS.change_seed)
 
 
