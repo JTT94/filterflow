@@ -83,21 +83,6 @@ def compare_learning_rates(pf, initial_state, observations_dataset, T, log_phi_x
     return loss_profiles, ess_profiles
 
 
-def plot_losses(plot_losses, filename, savefig, dx, dy, dense, T, change_seed):
-    fig, ax = plt.subplots(figsize=(5, 5))
-    loss_profiles_df.style.float_format = '${:,.1f}'.format
-    loss_profiles_df.plot(ax=ax, legend=False)
-
-    # ax.set_ylim(250, 700)
-    ax.legend()
-    fig.tight_layout()
-    if savefig:
-        fig.savefig(os.path.join('./charts/',
-                                 f'global_variational_different_lr_loss_{filename}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}_change_seed_{change_seed}.png'))
-    else:
-        fig.suptitle(f'variational_different_loss_{filename}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}')
-        plt.show()
-
 
 def plot_losses_vs_ess(loss_profiles_df, ess_profiles_df, filename, savefig, dx, dy, dense, T, n_particles, change_seed,
                        batch_size, optimal_filter_val, kalman_val, n_iter, mse_table, n_data):
@@ -287,7 +272,7 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.MULTINOMIAL, 'resampling_method')
+flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.REGULARIZED, 'resampling_method')
 flags.DEFINE_float('epsilon', 0.5, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.9, 'scaling')

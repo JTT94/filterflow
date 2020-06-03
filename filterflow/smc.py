@@ -52,11 +52,7 @@ class SMC(Module):
         if seed1 is None or seed2 is None:
             temp_seed = tf.random.uniform((), 0, 2 ** 16, tf.int32)
             seed1, seed2 = samplers.split_seed(temp_seed, n=2, salt='propose_and_weight')
-        # check if resampling is required
-        # tf.print("weights", tf.reduce_min(state.log_weights, 1))
-        # tf.print("ess_1", 1 / tf.reduce_sum(state.weights ** 2, -1))
         resampling_flag, ess = self._resampling_criterion.apply(state)
-        # tf.print("ess", ess)
         # update running average efficient sample size
         state = attr.evolve(state, ess=ess / float_t_1 + state.ess * (float_t / float_t_1))
         # perform resampling
