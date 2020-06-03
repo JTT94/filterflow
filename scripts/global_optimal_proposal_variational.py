@@ -19,9 +19,14 @@ from filterflow.resampling.differentiable.loss import SinkhornLoss
 from filterflow.resampling.differentiable.optimized import OptimizedPointCloud
 from filterflow.resampling.differentiable.optimizer.sgd import SGD
 
+import pickle
+
 from scripts.optimal_proposal_common import get_data, ResamplingMethodsEnum, get_observation_matrix, \
     get_observation_covariance, get_transition_covariance, get_transition_matrix
 
+def pickle_obj(obj, file_path):
+    with open(file_path, 'wb') as handle:
+        pickle.dump(obj, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 @tf.function
 def routine(pf, initial_state, observations_dataset, T, log_phi_x, phi_y, seed):
@@ -78,7 +83,7 @@ def compare_learning_rates(pf, initial_state, observations_dataset, T, log_phi_x
     return loss_profiles, ess_profiles
 
 
-def plot_losses(loss_profiles_df, filename, savefig, dx, dy, dense, T, change_seed):
+def plot_losses(plot_losses, filename, savefig, dx, dy, dense, T, change_seed):
     fig, ax = plt.subplots(figsize=(5, 5))
     loss_profiles_df.style.float_format = '${:,.1f}'.format
     loss_profiles_df.plot(ax=ax, legend=False)
@@ -110,6 +115,14 @@ def plot_losses_vs_ess(loss_profiles_df, ess_profiles_df, filename, savefig, dx,
 
     # ax.set_ylim(-2.5, -1.7)
     ax1.set_ylim(1, n_particles)
+
+    csv_fp = os.path.join('./charts/',
+                                 f'global_variational_different_loss_df_lr_loss_{filename}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}_change_seed_{change_seed}.csv')
+    loss_profiles_df.to_csv(csv_fp)
+    
+    csv_fp = os.path.join('./charts/',
+                                 f'global_variational_different_ess_df_lr_loss_{filename}_dx_{dx}_dy_{dy}_dense_{dense}_T_{T}_change_seed_{change_seed}.csv')
+    ess_profiles_df.to_csv(csv_fp)
 
     # ax.legend()
     fig.tight_layout()
