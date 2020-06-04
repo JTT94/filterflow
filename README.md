@@ -24,8 +24,7 @@ Supported features
 Example
 --------
 
-.. code-block:: python
-    
+```python
     import matplotlib.pyplot as plt
     import numpy as np
     import tensorflow as tf
@@ -85,7 +84,7 @@ Example
     log_likelihoods = state_series.log_likelihoods
     mean_particles = mean(state_series, keepdims=True)
     std_particles = std(state_series, mean_particles) # the mean argument is optional
-
+```
 
 
 Installation
@@ -102,7 +101,9 @@ or, if `git` is unavailable, download as a ZIP from GitHub https://github.com/<r
 2. Install:
 
 `python -m venv venv`
+
 `source venv/bin/activate`
+
 `pip install -r requirements.txt`
 
 
