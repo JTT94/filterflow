@@ -100,10 +100,13 @@ This project can be installed from its git repository.
     `git clone <repository>.git`
 
 or, if `git` is unavailable, download as a ZIP from GitHub https://github.com/<repository>.
-  ```
-  python -m venv venv
-  source venv/bin/activate
-  pip install -r requirements.txt
+  
+2. Install:
+
+```
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
   ```
 
 
