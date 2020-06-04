@@ -103,11 +103,9 @@ or, if `git` is unavailable, download as a ZIP from GitHub https://github.com/<r
   
 2. Install:
 
-```
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-  ```
+`python -m venv venv`
+`source venv/bin/activate`
+`pip install -r requirements.txt`
 
 
 References
