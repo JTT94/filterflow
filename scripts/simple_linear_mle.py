@@ -85,7 +85,7 @@ def gradient_descent(loss_fun, x0, observation_dataset, learning_rate, n_iter, f
             filter_seed, seed = split_seed(filter_seed, n=2)
         loss = loss.write(tf.cast(i, tf.int32), loss_val)
         val -= learning_rate * gradient_val
-        tf.print('\rStep ', i + 1, '/', n_iter, end='')
+        tf.print('\rStep ', i + 1, '/', n_iter, "grads", gradient_val, end='')
     loss_val, gradient_val = loss_fun(val, observation_dataset, seed)
     loss = loss.write(tf.cast(n_iter, tf.int32), loss_val)
     return val, loss.stack()
@@ -106,11 +106,11 @@ def plot_loss(data, final_val, filename, savefig):
 
 
 def main(resampling_method_value, resampling_neff, resampling_kwargs=None,
-         T=100, batch_size=1, n_particles=25,
+         T=100, batch_size=1, n_particles=25, phi=0.5,
          data_seed=0, filter_seed=1, learning_rate=0.001, n_iter=50,
          savefig=False, use_xla=False, batch_data=1, assume_differentiable=False, change_seed=False):
-    transition_matrix = 0.5 * np.eye(2, dtype=np.float32)
-    transition_covariance = np.eye(2, dtype=np.float32)
+    transition_matrix = phi * np.eye(2, dtype=np.float32)
+    transition_covariance = 0.5 * np.eye(2, dtype=np.float32)
     observation_matrix = np.eye(2, dtype=np.float32)
     observation_covariance = 0.1 * np.eye(2, dtype=np.float32)
 
@@ -171,7 +171,8 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None,
                       transition_covariance_chol,
                       resampling_method, resampling_criterion)
 
-    x0 = tf.constant([0.25, 0.25])
+    x0 = np_random_state.normal(phi / 2, 0.1, [2]).astype(np.float32)
+    print(x0)
 
     if resampling_method.DIFFERENTIABLE or assume_differentiable:
         loss_fun = lambda x, observation_dataset, seed: values_and_gradient(x, modifiable_transition_matrix, smc,
@@ -201,9 +202,11 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None,
                                              tf.constant(n_iter), tf.constant(filter_seed), tf.constant(change_seed))
         final_values.append(final_value.numpy())
         losses.append(loss.numpy())
-        kf_params = minimize(kf_likelihood_fun, x0.numpy(), args=(np_dataset,))
+        kf_params = minimize(kf_likelihood_fun, x0, args=(np_dataset,))
         kalman_params.append(kf_params.x)
-
+    losses = np.array(losses).T
+    plt.plot(losses)
+    plt.show()
     final_values = np.vstack(final_values)
     kalman_params = np.vstack(kalman_params)
 
@@ -222,18 +225,19 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None,
 FLAGS = flags.FLAGS
 
 flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.REGULARIZED, 'resampling_method')
-flags.DEFINE_float('epsilon', 0.25, 'epsilon')
+flags.DEFINE_float('epsilon', 0.5, 'epsilon')
+flags.DEFINE_float('phi', 0.9, 'transition coefficient')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.85, 'scaling')
-flags.DEFINE_float('learning_rate', 1e-4, 'learning_rate', upper_bound=1e-1)
-flags.DEFINE_float('convergence_threshold', 1e-5, 'convergence_threshold')
+flags.DEFINE_float('learning_rate', 1e-5, 'learning_rate', upper_bound=1e-1)
+flags.DEFINE_float('convergence_threshold', 1e-4, 'convergence_threshold')
 flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)
 flags.DEFINE_integer('batch_size', 4, 'batch_size', lower_bound=1)
 flags.DEFINE_integer('n_iter', 100, 'n_iter', lower_bound=10)
 flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
 flags.DEFINE_integer('T', 150, 'T', lower_bound=1)
 flags.DEFINE_boolean('savefig', True, 'Save fig')
-flags.DEFINE_integer('batch_data', 10, 'Data samples', lower_bound=1)
+flags.DEFINE_integer('batch_data', 5, 'Data samples', lower_bound=1)
 flags.DEFINE_boolean('use_xla', False, 'Use XLA (experimental)')
 flags.DEFINE_boolean('assume_differentiable', True, 'Assume that all schemes are differentiable')
 flags.DEFINE_boolean('change_seed', True, 'change seed between each gradient descent step')
@@ -244,6 +248,7 @@ def flag_main(argb):
     print('resampling_method: {0}'.format(ResamplingMethodsEnum(FLAGS.resampling_method).name))
     print('assume_differentiable: {0}'.format(FLAGS.assume_differentiable))
     print('epsilon: {0}'.format(FLAGS.epsilon))
+    print('phi: {0}'.format(FLAGS.phi))
     print('resampling_neff: {0}'.format(FLAGS.resampling_neff))
     print('convergence_threshold: {0}'.format(FLAGS.convergence_threshold))
     print('n_particles: {0}'.format(FLAGS.n_particles))
@@ -263,6 +268,7 @@ def flag_main(argb):
          T=FLAGS.T,
          n_particles=FLAGS.n_particles,
          batch_size=FLAGS.batch_size,
+         phi=FLAGS.phi,
          savefig=FLAGS.savefig,
          learning_rate=FLAGS.learning_rate,
          n_iter=FLAGS.n_iter,

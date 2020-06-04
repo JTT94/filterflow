@@ -252,7 +252,7 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
         delta_phi_m_1 = tf.linalg.diag(tf.exp(-log_phi_x))
         diff_cov = optimal_smc._proposal_model._sigma - delta_phi_m_1 @ transition_covariance
         approx_error = tf.linalg.diag_part(diff_cov).numpy()
-        mean_error = np.sqrt(np.mean(approx_error ** 2))
+        mean_error = np.sqrt(np.nanmean(approx_error ** 2))
         mean_errors.append(mean_error)
 
     losses_data = pd.concat(losses_list, axis=1)
@@ -272,27 +272,27 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.MULTINOMIAL, 'resampling_method')
+flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.REGULARIZED, 'resampling_method')
 flags.DEFINE_float('epsilon', 0.25, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.9, 'scaling')
-flags.DEFINE_float('log_learning_rate_min', -1.5, 'log_learning_rate_min')
-flags.DEFINE_float('log_learning_rate_max', -1.5, 'log_learning_rate_max')
+flags.DEFINE_float('log_learning_rate_min', np.log10(0.05), 'log_learning_rate_min')
+flags.DEFINE_float('log_learning_rate_max', np.log10(0.05), 'log_learning_rate_max')
 flags.DEFINE_integer('n_learning_rates', 1, 'log_learning_rate_max', lower_bound=1, upper_bound=1)
 flags.DEFINE_integer('n_data', 10, 'n_data', lower_bound=1)
-flags.DEFINE_boolean('change_seed', True, 'change seed between each gradient descent step')
+flags.DEFINE_boolean('change_seed', False, 'change seed between each gradient descent step')
 flags.DEFINE_float('convergence_threshold', 1e-4, 'convergence_threshold')
 flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)
 flags.DEFINE_integer('batch_size', 4, 'batch_size', lower_bound=1)
 flags.DEFINE_integer('n_iter', 100, 'n_iter', lower_bound=10)
 flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
-flags.DEFINE_integer('dx', 50, 'dx', lower_bound=1)
+flags.DEFINE_integer('dx', 25, 'dx', lower_bound=1)
 flags.DEFINE_integer('dy', 1, 'dy', lower_bound=1)
 flags.DEFINE_integer('T', 100, 'T', lower_bound=1)
 flags.DEFINE_boolean('savefig', True, 'Save fig')
 flags.DEFINE_boolean('use_xla', False, 'Use XLA (experimental)')
 flags.DEFINE_boolean('dense', False, 'dense')
-flags.DEFINE_integer('seed', 555, 'seed')
+flags.DEFINE_integer('seed', 77, 'seed')
 
 
 def flag_main(argb):
