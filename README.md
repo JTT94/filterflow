@@ -106,6 +106,11 @@ or, if `git` is unavailable, download as a ZIP from GitHub https://github.com/<r
 
 `pip install -r requirements.txt`
 
+3. Check examples:
+
+- Simple tutorials are available in the notebooks folder.
+- More comprehensive examples, used in our paper, are in the scripts folder.
+
 
 References
 ----------
