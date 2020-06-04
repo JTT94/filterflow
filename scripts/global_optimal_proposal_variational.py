@@ -272,8 +272,8 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.REGULARIZED, 'resampling_method')
-flags.DEFINE_float('epsilon', 0.5, 'epsilon')
+flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.MULTINOMIAL, 'resampling_method')
+flags.DEFINE_float('epsilon', 0.25, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.9, 'scaling')
 flags.DEFINE_float('log_learning_rate_min', -1.5, 'log_learning_rate_min')
@@ -284,9 +284,9 @@ flags.DEFINE_boolean('change_seed', True, 'change seed between each gradient des
 flags.DEFINE_float('convergence_threshold', 1e-4, 'convergence_threshold')
 flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)
 flags.DEFINE_integer('batch_size', 4, 'batch_size', lower_bound=1)
-flags.DEFINE_integer('n_iter', 75, 'n_iter', lower_bound=10)
+flags.DEFINE_integer('n_iter', 100, 'n_iter', lower_bound=10)
 flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
-flags.DEFINE_integer('dx', 25, 'dx', lower_bound=1)
+flags.DEFINE_integer('dx', 50, 'dx', lower_bound=1)
 flags.DEFINE_integer('dy', 1, 'dy', lower_bound=1)
 flags.DEFINE_integer('T', 100, 'T', lower_bound=1)
 flags.DEFINE_boolean('savefig', True, 'Save fig')
