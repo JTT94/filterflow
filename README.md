@@ -97,7 +97,7 @@ This project can be installed from its git repository.
 
 1. Obtain the sources by:
     
-    `git clone <repository>.git`
+    `git clone <https://github.com/repository>.git`
 
 or, if `git` is unavailable, download as a ZIP from GitHub https://github.com/<repository>.
   
