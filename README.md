@@ -1,5 +1,3 @@
-.. -*- mode: rst -*-
-
 # FilterFlow (Beta)
 
 A differentiable (and classical) TensorFlow implementation of Particle Filtering (SMC) techniques.
