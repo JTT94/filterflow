@@ -100,16 +100,16 @@ or, if `git` is unavailable, download as a ZIP from GitHub https://github.com/<r
   
 2. Install:
 
-`python -m venv venv`
+    `python -m venv venv`
 
-`source venv/bin/activate`
+    `source venv/bin/activate`
 
-`pip install -r requirements.txt`
+    `pip install -r requirements.txt`
 
 3. Check examples:
 
-- Simple tutorials are available in the notebooks folder.
-- More comprehensive examples, used in our paper, are in the scripts folder.
+    - Simple tutorials are available in the notebooks folder.
+    - More comprehensive examples, used in our paper, are in the scripts folder.
 
 
 References
