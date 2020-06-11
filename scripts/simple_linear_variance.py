@@ -5,8 +5,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-tf.config.set_visible_devices([], 'GPU')
-
+from filterflow import std
 from filterflow.base import State
 from filterflow.models.simple_linear_gaussian import make_filter
 from filterflow.resampling import MultinomialResampler, SystematicResampler, StratifiedResampler, RegularisedTransform
@@ -19,44 +18,33 @@ from scripts.simple_linear_common import get_data, kf_loglikelihood, ResamplingM
 
 
 @tf.function(experimental_relax_shapes=True)
-def get_elbos(pf, initial_state, observations_dataset, T, modifiable_transition_values, values, filter_seed):
-    elbos = tf.TensorArray(dtype=tf.float32, size=values.shape[0])
-    for i in tf.range(values.shape[0]):
-        val = values[i]
-        assign_op = modifiable_transition_values.assign(tf.linalg.diag(val))
-        with tf.control_dependencies([assign_op]):
-            final_state = pf(initial_state, observations_dataset, n_observations=T, return_final=True, seed=filter_seed)
-        elbos = elbos.write(tf.cast(i, tf.int32), final_state.log_likelihoods / tf.cast(T, float))
-    return elbos.stack()
+def get_states(pf, initial_state, observations_dataset, T, filter_seed):
+    states = pf(initial_state, observations_dataset, n_observations=T, return_final=False, seed=filter_seed)
+    return states
 
 
-def kalman_main(kf, data, values, T, savefig):
-    log_likelihoods = []
-    for val in values:
-        transition_matrix = np.diag(val)
-        kf_copy = copy.copy(kf)
-        kf_copy.transition_matrices = transition_matrix
-        log_likelihoods.append(kf_loglikelihood(kf_copy, data) / T)
-    likelihoods_df = pd.Series(log_likelihoods,
-                               name=r'$\ell(\theta_1, \theta_2)$',
-                               index=pd.Index(values[:, 0],
-                                              name=r'$\theta_1, \theta_2$')).to_frame().reset_index()
+def kalman_main(kf, data, savefig):
+    _, cov = kf.filter(data)
+    stdevs = np.sqrt(np.diagonal(cov, axis1=-2, axis2=-1))
+    stdevs = stdevs.mean(0, keepdims=True)
+
+    stdevs_df = pd.DataFrame(stdevs,
+                             columns=[r'$\sigma(x_1)$', r'$\sigma(x_2)$'],
+                             index=["Kalman Filter"]).T.reset_index()
     if savefig:
-        filename = f'kalman_likelihoods_values.tex'
-        likelihoods_df.to_latex(buf=os.path.join('./tables/', filename),
-                                float_format='{:,.3f}'.format, escape=False, index=False)
+        filename = f'kalman_std_values.tex'
+        stdevs_df.to_latex(buf=os.path.join('./tables/', filename),
+                           float_format='{:,.3f}'.format, escape=False, index=False)
     else:
-        print(likelihoods_df.to_latex(float_format='{:,.3f}'.format, escape=False, index=False))
+        print(stdevs_df.to_latex(float_format='{:,.3f}'.format, escape=False, index=False))
 
 
 def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=150, batch_size=50, n_particles=25,
-         data_seed=0, values=(0.25, 0.5, 0.75), filter_seed=555, savefig=False):
+         data_seed=0, filter_seed=555, savefig=False):
     transition_matrix = 0.5 * np.eye(2, dtype=np.float32)
     transition_covariance = np.eye(2, dtype=np.float32)
     observation_matrix = np.eye(2, dtype=np.float32)
     observation_covariance = 0.1 * np.eye(2, dtype=np.float32)
-
-    values = np.array(list(zip(values, values)), dtype=np.float32)
 
     resampling_method_enum = ResamplingMethodsEnum(resampling_method_value)
 
@@ -65,8 +53,8 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=150
                         np_random_state)
     observation_dataset = tf.data.Dataset.from_tensor_slices(data)
 
-    if resampling_method_enum == 6:
-        return kalman_main(kf, data, values, T, savefig)
+    if resampling_method_enum == ResamplingMethodsEnum.KALMAN:
+        return kalman_main(kf, data, savefig)
 
     if resampling_kwargs is None:
         resampling_kwargs = {}
@@ -100,8 +88,6 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=150
     else:
         raise ValueError(f'resampling_method_name {resampling_method_enum} is not a valid ResamplingMethodsEnum')
 
-    init_transition_matrix = (0.5 * np.eye(2) + 0.1 * np_random_state.randn(2, 2)).astype(np.float32)
-    modifiable_transition_matrix = tf.Variable(init_transition_matrix, trainable=True)
     observation_matrix = tf.convert_to_tensor(observation_matrix)
     transition_covariance_chol = tf.linalg.cholesky(transition_covariance)
     observation_covariance_chol = tf.linalg.cholesky(observation_covariance)
@@ -109,37 +95,35 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=150
     initial_particles = np_random_state.normal(0., 1., [batch_size, n_particles, 2]).astype(np.float32)
     initial_state = State(tf.constant(initial_particles))
 
-    smc = make_filter(observation_matrix, modifiable_transition_matrix, observation_covariance_chol,
+    smc = make_filter(observation_matrix, transition_matrix, observation_covariance_chol,
                       transition_covariance_chol, resampling_method, resampling_criterion)
 
-    elbos = get_elbos(smc,
-                      initial_state,
-                      observation_dataset,
-                      tf.constant(T),
-                      modifiable_transition_matrix,
-                      tf.constant(values),
-                      tf.constant(filter_seed))
+    states = get_states(smc,
+                        initial_state,
+                        observation_dataset,
+                        tf.constant(T),
+                        tf.constant(filter_seed))
 
-    elbos_df = pd.DataFrame(elbos.numpy(), pd.Index(values[:, 0], name=r'$\theta_1$, $\theta_2$'))
+    stddevs = std(states, keepdims=False).numpy()
+    stddevs_df = stddevs
 
-    elbos_df = elbos_df.T.describe().T[['mean', 'std']].reset_index()
-
-    if savefig:
-        filename = f'{resampling_method_enum.name}_batchsize_{batch_size}_N_{n_particles}_likelihoods_values.tex'
-        elbos_df.to_latex(buf=os.path.join('./tables/', filename),
-                          float_format='{:,.3f}'.format, escape=False, index=False)
-    else:
-        print(elbos_df.to_latex(float_format='{:,.3f}'.format, escape=False, index=False))
+    # elbos_df = stdevs_df.describe().loc[['mean', 'std']].reset_index()
+    #
+    # if savefig:
+    #     filename = f"{resampling_method_enum.name}_batchsize_{batch_size}_epsilon_{resampling_kwargs.get('epsilon')}_N_{n_particles}_stddev_values.tex"
+    #     elbos_df.to_latex(buf=os.path.join('./tables/', filename),
+    #                       float_format='{:,.3f}'.format, escape=False, index=False)
+    # else:
+    #     print(elbos_df.to_latex(float_format='{:,.3f}'.format, escape=False, index=False))
 
 
 if __name__ == '__main__':
-    for resampling_method in {ResamplingMethodsEnum.VARIANCE_CORRECTED, ResamplingMethodsEnum.REGULARIZED,
-                              ResamplingMethodsEnum.MULTINOMIAL}:
+    for resampling_method in {ResamplingMethodsEnum.VARIANCE_CORRECTED, ResamplingMethodsEnum.REGULARIZED}:
         for n_particles in {25, 50, 100}:
-            main(resampling_method, 0.5, T=150, n_particles=n_particles, batch_size=100,
-                 resampling_kwargs=dict(epsilon=0.5, scaling=0.75, convergence_threshold=1e-1),
+            main(resampling_method, 0.9, T=150, n_particles=n_particles, batch_size=100,
+                 resampling_kwargs=dict(epsilon=0.5, scaling=0.95, convergence_threshold=1e-3),
                  filter_seed=555, data_seed=111, savefig=True)
 
     main(ResamplingMethodsEnum.KALMAN, 0.5, T=150, n_particles=25, batch_size=100,
-         resampling_kwargs=dict(epsilon=0.5, scaling=0.75, convergence_threshold=1e-1),
+         resampling_kwargs=dict(epsilon=0.5, scaling=0.75, convergence_threshold=1e-3),
          filter_seed=555, data_seed=111, savefig=True)

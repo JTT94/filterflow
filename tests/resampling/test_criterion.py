@@ -2,7 +2,7 @@ import math
 
 import tensorflow as tf
 
-from filterflow.resampling.criterion import _neff, NeffCriterion
+from filterflow.resampling.criterion import neff, NeffCriterion
 
 
 class MockState(object):
@@ -28,15 +28,15 @@ class TestNeffCriterion(tf.test.TestCase):
         self.neff_instance = NeffCriterion(0.5, True, False, True)
 
     def test_neff_normalized(self):
-        flag, _ = _neff(self.weights, True, False, 0.5 * 3)
-        flag_log, _ = _neff(self.log_weights, True, True, 0.5 * 3)
+        flag, _ = neff(self.weights, True, False, 0.5 * 3)
+        flag_log, _ = neff(self.log_weights, True, True, 0.5 * 3)
 
         self.assertAllEqual(flag, flag_log)
         self.assertAllEqual(flag, [False, True])
 
     def test_neff_unnormalized(self):
-        flag, _ = _neff(self._scaled_weights, False, False, 0.5 * 3)
-        flag_log, _ = _neff(self._scaled_log_weights, False, True, 0.5 * 3)
+        flag, _ = neff(self._scaled_weights, False, False, 0.5 * 3)
+        flag_log, _ = neff(self._scaled_log_weights, False, True, 0.5 * 3)
 
         self.assertAllEqual(flag, flag_log)
         self.assertAllEqual(flag, [False, True])

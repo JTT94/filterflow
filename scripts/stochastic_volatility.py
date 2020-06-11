@@ -41,7 +41,8 @@ class ResamplingMethodsEnum(enum.IntEnum):
     REGULARIZED = 3
     VARIANCE_CORRECTED = 4
     OPTIMIZED = 5
-    CORRECTED=6
+    CORRECTED = 6
+
 
 def resampling_method_factory(resampling_method_enum, resampling_kwargs):
     if resampling_method_enum == ResamplingMethodsEnum.MULTINOMIAL:
@@ -113,12 +114,12 @@ def get_gradient_descent_function():
                 ess = ess.write(tf.cast(i, tf.int32), average_ess)
                 # for grad in grads:
                 # tf.print(tf.reduce_max(tf.abs(grad)))
-                grads = [tf.clip_by_value(grad, -1e2, 1e2) for grad in grads]
+                max_grad = tf.reduce_max([tf.reduce_max(tf.abs(grad)) for grad in grads])
                 # for grad in grads:
                 # tf.print(tf.reduce_max(tf.abs(grad)))
                 optimizer.apply_gradients(zip(grads, variables))
                 # tf.print('')
-                tf.print('\rStep', i, '/', n_iter, ', loss: ', loss_value, end='')
+                tf.print('\rStep', i, '/', n_iter, ', loss: ', loss_value, ', grads: ', max_grad, end='')
 
         return [tf.convert_to_tensor(var) for var in variables], loss.stack(), ess.stack()
 
@@ -169,7 +170,7 @@ def plot_losses_vs_ess(loss_profiles_df, ess_profiles_df, filename, savefig, M, 
     ax1 = ax.twinx()
     ess_profiles_df.plot.area(ax=ax1, legend=False, linestyle='--', alpha=0.33, stacked=False)
 
-    # ax.set_ylim(-4.5, -1.7)
+    ax.set_ylim(8, 21)
     ax1.set_ylim(1, n_particles)
 
     # ax.legend()
@@ -178,6 +179,8 @@ def plot_losses_vs_ess(loss_profiles_df, ess_profiles_df, filename, savefig, M, 
     if savefig:
         fig.savefig(os.path.join('./charts/',
                                  filename + '.png'))
+        loss_profiles_df.to_csv(os.path.join('./tables/',
+                                             filename + '.csv'))
 
     else:
         fig.suptitle(f'stochvol_loss_ess_{filename}_nfactors_M_{M}')
@@ -247,13 +250,13 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
     initial_particles = np_random_state.normal(1., 0.5, [batch_size, n_particles, M]).astype(np.float32)
     initial_state = State(initial_particles)
 
-    large_initial_particles = np_random_state.normal(1., 0.5, [100, n_particles, M]).astype(np.float32)
+    large_initial_particles = np_random_state.normal(1., 0.5, [25, n_particles, M]).astype(np.float32)
     large_initial_state = State(large_initial_particles)
 
-    mu_init = 1. * tf.ones(M)
-    F_init = tf.eye(M)
-    transition_cov_init = 0.2 * tf.eye(M)
-    observation_cov_init = 0.1 * tf.eye(M)
+    mu_init = -5. * tf.ones(M)
+    F_init = 0.9 * tf.eye(M)
+    transition_cov_init = 0.35 * tf.eye(M)
+    observation_cov_init = 1. * tf.eye(M)
 
     mu = tf.Variable(mu_init, trainable=True)
     F = tf.Variable(F_init, trainable=True)
@@ -288,18 +291,26 @@ def main(resampling_method_value, resampling_neff, learning_rates=(1e-4, 1e-3), 
     plot_losses_vs_ess(losses_df, ess_df, resampling_method_enum.name, savefig, M, n_particles,
                        change_seed, batch_size, n_iter, resampling_kwargs.get("epsilon"))
 
+    print(mu)
+    print(F)
+    print(transition_cov)
+
+    print(mu_init)
+    print(F_init)
+    print(transition_cov_init)
+
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.REGULARIZED, 'resampling_method')
-flags.DEFINE_float('epsilon', 0.33, 'epsilon')
+flags.DEFINE_float('epsilon', 0.5, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.9, 'scaling')
-flags.DEFINE_float('log_learning_rate_min', -3., 'log_learning_rate_min')
+flags.DEFINE_float('log_learning_rate_min', -2., 'log_learning_rate_min')
 flags.DEFINE_float('log_learning_rate_max', -3., 'log_learning_rate_max')
-flags.DEFINE_integer('n_learning_rates', 1, 'log_learning_rate_max')
+flags.DEFINE_integer('n_learning_rates', 2, 'log_learning_rate_max')
 flags.DEFINE_boolean('change_seed', True, 'change seed between each gradient descent step')
-flags.DEFINE_float('convergence_threshold', 1e-6, 'convergence_threshold')
+flags.DEFINE_float('convergence_threshold', 1e-3, 'convergence_threshold')
 flags.DEFINE_integer('n_particles', 10, 'n_particles', lower_bound=4)
 flags.DEFINE_integer('batch_size', 4, 'batch_size', lower_bound=1)
 flags.DEFINE_integer('n_iter', 250, 'n_iter', lower_bound=10)
@@ -307,7 +318,7 @@ flags.DEFINE_integer('max_iter', 200, 'max_iter', lower_bound=1)
 flags.DEFINE_boolean('savefig', True, 'Save fig')
 flags.DEFINE_integer('seed', 222, 'seed')
 
-flags.DEFINE_list('currencies', "GBP,CAD,AUD,CHF,USD", 'currencies - this is all taken against EUR')
+flags.DEFINE_list('currencies', "AUD,CAD,CHF,GBP,USD", 'currencies - this is all taken against EUR')
 flags.DEFINE_string('start_date', '2019-06-01', 'start_date')
 flags.DEFINE_string('end_date', '2020-01-02', 'end_date')
 flags.DEFINE_string('api_key', '', 'QUANDL API key')

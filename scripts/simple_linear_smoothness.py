@@ -287,6 +287,7 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None, T=100
                                             initial_state, False, observation_dataset, T,
                                             filter_seed, use_tqdm)
 
+    print(gradients.numpy())
     plot_surface(mesh, mesh_size, log_likelihoods.numpy(), resampling_method_enum.name, resampling_kwargs, n_particles, savefig)
     plot_vector_field(mesh, mesh_size, log_likelihoods.numpy(), gradients.numpy(), resampling_method_enum.name,
                       resampling_kwargs, n_particles, savefig)
@@ -302,13 +303,13 @@ def fun_to_distribute(epsilon):
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.REGULARIZED, 'resampling_method')
-flags.DEFINE_float('epsilon', 0.5, 'epsilon')
+flags.DEFINE_integer('resampling_method', ResamplingMethodsEnum.VARIANCE_CORRECTED, 'resampling_method')
+flags.DEFINE_float('epsilon', 0.75, 'epsilon')
 flags.DEFINE_float('resampling_neff', 0.5, 'resampling_neff')
 flags.DEFINE_float('scaling', 0.75, 'scaling')
 flags.DEFINE_float('convergence_threshold', 1e-3, 'convergence_threshold')
 flags.DEFINE_float('diff_epsilon', 1e-2, 'epsilon for finite diff')
-flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)
+flags.DEFINE_integer('n_particles', 5, 'n_particles', lower_bound=4)
 flags.DEFINE_integer('max_iter', 500, 'max_iter', lower_bound=1)
 flags.DEFINE_integer('T', 150, 'T', lower_bound=1)
 flags.DEFINE_integer('mesh_size', 20, 'mesh_size', lower_bound=1)

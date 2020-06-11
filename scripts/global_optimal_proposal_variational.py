@@ -280,7 +280,7 @@ flags.DEFINE_float('log_learning_rate_min', np.log10(0.05), 'log_learning_rate_m
 flags.DEFINE_float('log_learning_rate_max', np.log10(0.05), 'log_learning_rate_max')
 flags.DEFINE_integer('n_learning_rates', 1, 'log_learning_rate_max', lower_bound=1, upper_bound=1)
 flags.DEFINE_integer('n_data', 10, 'n_data', lower_bound=1)
-flags.DEFINE_boolean('change_seed', False, 'change seed between each gradient descent step')
+flags.DEFINE_boolean('change_seed', True, 'change seed between each gradient descent step')
 flags.DEFINE_float('convergence_threshold', 1e-4, 'convergence_threshold')
 flags.DEFINE_integer('n_particles', 25, 'n_particles', lower_bound=4)
 flags.DEFINE_integer('batch_size', 4, 'batch_size', lower_bound=1)

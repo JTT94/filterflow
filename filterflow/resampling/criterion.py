@@ -17,19 +17,22 @@ class ResamplingCriterionBase(Module, metaclass=abc.ABCMeta):
         """
 
 
-def _neff(tensor, assume_normalized: bool, is_log: bool, threshold: float):
+def neff(tensor, assume_normalized: bool, is_log: bool, threshold: float):
     if is_log:
         if assume_normalized:
             log_neff = -tf.reduce_logsumexp(2 * tensor, 1)
         else:
             log_neff = 2 * tf.reduce_logsumexp(tensor, 1) - tf.reduce_logsumexp(2 * tensor, 1)
-        return log_neff <= tf.math.log(threshold), tf.exp(log_neff)
+        flag = log_neff <= tf.math.log(threshold)
+        return flag, tf.exp(log_neff)
     else:
         if assume_normalized:
             neff = 1 / tf.reduce_sum(tensor ** 2, 1)
         else:
             neff = tf.reduce_sum(tensor, 1) ** 2 / tf.reduce_sum(tensor ** 2, 1)
-    return neff <= threshold, neff
+        flag = neff <= threshold
+
+        return flag, neff
 
 
 class NeffCriterion(ResamplingCriterionBase):
@@ -55,18 +58,18 @@ class NeffCriterion(ResamplingCriterionBase):
         """
         threshold = self._threshold if not self._is_relative else tf.cast(state.n_particles, float) * self._threshold
         if self._on_log:
-            return _neff(state.log_weights, self._assume_normalized, self._on_log, threshold)
+            return neff(state.log_weights, self._assume_normalized, self._on_log, threshold)
         else:
-            return _neff(state.weights, self._assume_normalized, self._on_log, threshold)
+            return neff(state.weights, self._assume_normalized, self._on_log, threshold)
 
 
 class AlwaysResample(ResamplingCriterionBase):
 
     def apply(self, state: State):
-        return tf.ones(state.batch_size, dtype=tf.bool),
+        return tf.ones(state.batch_size, dtype=tf.bool), tf.zeros(state.batch_size, dtype=tf.float32)
 
 
 class NeverResample(ResamplingCriterionBase):
 
     def apply(self, state: State):
-        return tf.zeros(state.batch_size, dtype=tf.bool)
+        return tf.zeros(state.batch_size, dtype=tf.bool), tf.zeros(state.batch_size, dtype=tf.float32)
