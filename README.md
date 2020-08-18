@@ -1,3 +1,7 @@
+Contibutors:
+- [Adrien Corenflos](https://github.com/AdrienCorenflos)
+- [James Thornton](https://github.com/JTT94)
+
 # FilterFlow (Beta)
 
 A differentiable (and classical) TensorFlow implementation of Particle Filtering (SMC) techniques.
