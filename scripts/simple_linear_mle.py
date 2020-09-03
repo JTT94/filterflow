@@ -85,7 +85,7 @@ def gradient_descent(loss_fun, x0, observation_dataset, learning_rate, n_iter, f
             filter_seed, seed = split_seed(filter_seed, n=2)
         loss = loss.write(tf.cast(i, tf.int32), loss_val)
         val -= learning_rate * gradient_val
-        tf.print('\rStep ', i + 1, '/', n_iter, "grads", gradient_val, end='')
+        tf.print('\rStep ', i + 1, '/', n_iter, "grads", gradient_val, "values", val, end='')
     loss_val, gradient_val = loss_fun(val, observation_dataset, seed)
     loss = loss.write(tf.cast(n_iter, tf.int32), loss_val)
     return val, loss.stack()
@@ -159,7 +159,7 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None,
     else:
         raise ValueError(f'resampling_method_name {resampling_method_enum} is not a valid ResamplingMethodsEnum')
 
-    modifiable_transition_matrix = tf.Variable(transition_matrix, trainable=False)
+    modifiable_transition_matrix = tf.Variable(transition_matrix, trainable=True)
     observation_matrix = tf.convert_to_tensor(observation_matrix)
     transition_covariance_chol = tf.linalg.cholesky(transition_covariance)
     observation_covariance_chol = tf.linalg.cholesky(observation_covariance)
@@ -171,7 +171,7 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None,
                       transition_covariance_chol,
                       resampling_method, resampling_criterion)
 
-    x0 = np_random_state.normal(phi / 2, 0.1, [2]).astype(np.float32)
+    x0 = np.array([2 * phi / 3] * 2).astype(np.float32)
     print(x0)
 
     if resampling_method.DIFFERENTIABLE or assume_differentiable:
@@ -214,7 +214,7 @@ def main(resampling_method_value, resampling_neff, resampling_kwargs=None,
     parameters_diff = np.mean(np.square(df), 0)
     if savefig:
         filename = f'theta_diff_{resampling_method_enum.name}_batch_size_{batch_size}_N_{n_particles}_batch_data_{batch_data}_changeseed_{change_seed}.csv'
-        parameters_diff.to_csv(os.path.join('./tables/', filename),
+        df.to_csv(os.path.join('./tables/', filename),
                                float_format='%.5f')
     else:
         print(parameters_diff.to_latex(float_format='%.5f'))
