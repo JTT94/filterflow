@@ -25,7 +25,6 @@ class SMC(Module):
     @tf.function
     def predict(self, state: State, inputs: tf.Tensor):
         """Predict step of the filter
-
         :param state: State
             prior state of the filter
         :param inputs: tf.Tensor
@@ -172,3 +171,4 @@ class SMC(Module):
             return self._return_final_loop(initial_state, observation_series, n_observations, inputs_series, seed)
         else:
             return self._return_all_loop(initial_state, observation_series, n_observations, inputs_series, seed)
+
