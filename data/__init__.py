@@ -1,12 +1,17 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-import pickle
 
 import tensorflow as tf
 from scipy.sparse import coo_matrix
+import pickle
 
+def pickle_obj(obj, file_path):
+    with open(file_path, 'wb') as handle:
+        pickle.dump(obj, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def unpickle_obj(file_path):
+    with open(file_path, 'rb') as handle:
+        obj = pickle.load(handle)
+    return obj
 
 def sparse_pianoroll_to_dense(pianoroll, min_note, num_notes):
     """Converts a sparse pianoroll to a dense numpy array.
