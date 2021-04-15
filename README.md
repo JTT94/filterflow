@@ -4,7 +4,18 @@ Contibutors:
 
 # FilterFlow (Beta)
 
-A differentiable (and classical) TensorFlow implementation of Particle Filtering (SMC) techniques.
+A differentiable (and classical) TensorFlow implementation of Particle Filtering (SMC) techniques. If you are using this code in your research, please cite our paper.
+
+```bibtex
+@misc{dpf2021,
+      title={Differentiable Particle Filtering via Entropy-Regularized Optimal Transport}, 
+      author={Adrien Corenflos and James Thornton and Arnaud Doucet and George Deligiannidis},
+      year={2021},
+      eprint={2102.07850},
+      archivePrefix={arXiv},
+      primaryClass={stat.ML}
+}
+```
 
 ![](resonator.gif)
 
