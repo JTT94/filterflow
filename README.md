@@ -4,7 +4,7 @@ Contibutors:
 
 # FilterFlow (Beta)
 
-A differentiable (and classical) TensorFlow implementation of Particle Filtering (SMC) techniques. If you are using this code in your research, please cite our paper.
+A differentiable (and classical) TensorFlow implementation of Particle Filtering (SMC) techniques. If you are using this code in your research, please consider citing our paper.
 
 ```bibtex
 @misc{dpf2021,
