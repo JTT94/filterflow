@@ -7,13 +7,20 @@ Contibutors:
 A differentiable (and classical) TensorFlow implementation of Particle Filtering (SMC) techniques. If you are using this code in your research, please consider citing our paper.
 
 ```bibtex
-@misc{dpf2021,
-      title={Differentiable Particle Filtering via Entropy-Regularized Optimal Transport}, 
-      author={Adrien Corenflos and James Thornton and Arnaud Doucet and George Deligiannidis},
-      year={2021},
-      eprint={2102.07850},
-      archivePrefix={arXiv},
-      primaryClass={stat.ML}
+@InProceedings{pmlr-v139-corenflos21a,
+  title = 	 {Differentiable Particle Filtering via Entropy-Regularized Optimal Transport},
+  author =       {Corenflos, Adrien and Thornton, James and Deligiannidis, George and Doucet, Arnaud},
+  booktitle = 	 {Proceedings of the 38th International Conference on Machine Learning},
+  pages = 	 {2100--2111},
+  year = 	 {2021},
+  editor = 	 {Meila, Marina and Zhang, Tong},
+  volume = 	 {139},
+  series = 	 {Proceedings of Machine Learning Research},
+  month = 	 {18--24 Jul},
+  publisher =    {PMLR},
+  pdf = 	 {http://proceedings.mlr.press/v139/corenflos21a/corenflos21a.pdf},
+  url = 	 {https://proceedings.mlr.press/v139/corenflos21a.html},
+  abstract = 	 {Particle Filtering (PF) methods are an established class of procedures for performing inference in non-linear state-space models. Resampling is a key ingredient of PF necessary to obtain low variance likelihood and states estimates. However, traditional resampling methods result in PF-based loss functions being non-differentiable with respect to model and PF parameters. In a variational inference context, resampling also yields high variance gradient estimates of the PF-based evidence lower bound. By leveraging optimal transport ideas, we introduce a principled differentiable particle filter and provide convergence results. We demonstrate this novel method on a variety of applications.}
 }
 ```
 
