@@ -1,6 +1,6 @@
 absl-py
 dm-sonnet
-gast=0.3.3
+gast==0.3.3
 graphs
 jupyter
 matplotlib
